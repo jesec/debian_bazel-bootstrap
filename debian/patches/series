@@ -12,3 +12,4 @@ fix-privacy-issues.patch
 build-bash_completion.patch
 rename-daemonize.patch
 change-sysmtem-rc-file-location.patch
+remove-android-rules.patch
