@@ -4,6 +4,7 @@ bazel-bootstrap (3.4.0+ds-2) unstable; urgency=medium
   * Change default system bazelrc file location for Debian Bazel
   * Remove Android dependency due to unavailability in Testing
     - Add remove-android-rules.patch
+  * Remove phpsysinfo dependency
 
  -- Olek Wojnar <olek@debian.org>  Tue, 03 Nov 2020 14:40:08 -0500
 

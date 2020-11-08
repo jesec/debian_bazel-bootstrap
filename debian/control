@@ -77,9 +77,9 @@ Depends: bazel-bootstrap-data, build-essential, libchecker-framework-java,
          libgeronimo-annotation-1.3-spec-java, libgoogle-api-client-java,
          libgoogle-auth-java, libgoogle-auto-common-java,
          libgoogle-auto-service-java, libgoogle-auto-value-java,
-         libgoogle-flogger-java, libgrpc-java, libjs-jquery, libopencensus-java,
-         node-core-js, node-html5shiv, openjdk-11-jdk-headless, phpsysinfo,
-         protobuf-compiler-grpc-java-plugin, python3, unzip, zlib1g-dev,
+         libgoogle-flogger-java, libgrpc-java, libopencensus-java,
+         openjdk-11-jdk-headless, protobuf-compiler-grpc-java-plugin,
+         python3, unzip, zlib1g-dev,
          ${shlibs:Depends}, ${misc:Depends}, ${python3:Depends},
 Description: Tool to automate software builds and tests
  Supported build tasks include running compilers and linkers to produce
@@ -93,7 +93,8 @@ Description: Tool to automate software builds and tests
 Package: bazel-bootstrap-data
 Architecture: all
 Multi-Arch: foreign
-Depends: ${shlibs:Depends}, ${misc:Depends}, ${python3:Depends},
+Depends: libjs-jquery, node-core-js, node-html5shiv,
+         ${shlibs:Depends}, ${misc:Depends}, ${python3:Depends},
 Recommends: bazel-bootstrap
 Suggests: bash-completion
 Description: Tool to automate software builds and tests (data files)
