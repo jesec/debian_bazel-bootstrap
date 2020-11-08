@@ -67,8 +67,8 @@ Build-Depends: debhelper-compat (= 13),
 Standards-Version: 4.5.0
 Rules-Requires-Root: no
 Homepage: https://bazel.build/
-Vcs-Browser: https://salsa.debian.org/olek/bazel-bootstrap
-Vcs-Git: https://salsa.debian.org/olek/bazel-bootstrap.git
+Vcs-Browser: https://salsa.debian.org/bazel-team/bazel-bootstrap
+Vcs-Git: https://salsa.debian.org/bazel-team/bazel-bootstrap.git
 
 Package: bazel-bootstrap
 Architecture: any

@@ -8,3 +8,5 @@ bazel-bootstrap-data: arch-dependent-file-in-usr-share
 # False positive, bug reported at:
 # https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=968071
 bazel-bootstrap-data: arch-independent-package-contains-binary-or-object
+# Identified files are not documentation
+bazel-bootstrap-data: package-contains-documentation-outside-usr-share-doc

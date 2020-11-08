@@ -74,6 +74,8 @@ override_dh_installdocs:
 		${BAZDATADIR}/usr/share/doc/bazel-bootstrap/README-build_defs.md
 	mv ${BAZDATADIR}/usr/share/bazel/embedded_tools/tools/config/README.md \
 		${BAZDATADIR}/usr/share/doc/bazel-bootstrap/README-config.md
+	mv ${BAZDATADIR}/usr/share/bazel/embedded_tools/third_party/def_parser/Copyright.txt \
+		${BAZDATADIR}/usr/share/doc/bazel-bootstrap/def_parser-copyright.txt
 
 override_dh_link:
 	jdupes -rl ${BAZDATADIR}/usr
