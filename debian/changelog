@@ -1,12 +1,13 @@
-bazel-bootstrap (3.4.0+ds-2) unstable; urgency=medium
+bazel-bootstrap (3.4.0+ds-2) unstable; urgency=high
 
   * Fix sandbox path option
   * Change default system bazelrc file location for Debian Bazel
   * Remove Android dependency due to unavailability in Testing
     - Add remove-android-rules.patch
   * Remove phpsysinfo dependency
+  * Fix build failure on buildds (Closes: #973508)
 
- -- Olek Wojnar <olek@debian.org>  Tue, 03 Nov 2020 14:40:08 -0500
+ -- Olek Wojnar <olek@debian.org>  Sun, 08 Nov 2020 20:37:29 -0500
 
 bazel-bootstrap (3.4.0+ds-1) unstable; urgency=medium
 

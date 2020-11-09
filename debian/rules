@@ -67,17 +67,13 @@ override_dh_install:
 	dh_install
 	rm -rf ${BAZDATADIR}/usr/share/bazel/embedded_tools/tools/zip/zipper
 
-override_dh_installdocs:
+override_dh_installdocs-arch:
 	dh_installdocs --package=bazel-bootstrap -XREADME.Debian
-	dh_installdocs --package=bazel-bootstrap-data --doc-main-package=bazel-bootstrap
-	mv ${BAZDATADIR}/usr/share/bazel/embedded_tools/tools/build_defs/pkg/README.md \
-		${BAZDATADIR}/usr/share/doc/bazel-bootstrap/README-build_defs.md
-	mv ${BAZDATADIR}/usr/share/bazel/embedded_tools/tools/config/README.md \
-		${BAZDATADIR}/usr/share/doc/bazel-bootstrap/README-config.md
-	mv ${BAZDATADIR}/usr/share/bazel/embedded_tools/third_party/def_parser/Copyright.txt \
-		${BAZDATADIR}/usr/share/doc/bazel-bootstrap/def_parser-copyright.txt
 
-override_dh_link:
+override_dh_installdocs-indep:
+	dh_installdocs --package=bazel-bootstrap-data --doc-main-package=bazel-bootstrap
+
+override_dh_link-indep:
 	jdupes -rl ${BAZDATADIR}/usr
 	find ${BAZDATADIR}/usr/share/bazel/embedded_tools -type f -name \
 		'*.h' -printf '%h\n' | sort -u | sed 's@/build.*embedded_tools/@@' | \
@@ -88,7 +84,7 @@ override_dh_link:
 		${BAZDATADIR}/usr/include/bazel/%
 	dh_link
 
-override_dh_fixperms:
+override_dh_fixperms-indep:
 	find ${BAZDATADIR}/usr/share -type f -print0 2>/dev/null | xargs -0r chmod a-x
 	find ${BAZDATADIR}/usr/share/doc/bazel/examples -type f \
 		-not -name '*.sh' -print0 2>/dev/null | xargs -0r chmod a-x

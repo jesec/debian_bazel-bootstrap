@@ -1,8 +1,7 @@
 Description: Install into proper Debian packaging directory
- This patch needs to be updated for every upstream version change!
 Author: Olek Wojnar <olek@debian.org>
 Forwarded: not-needed
-Last-Update: 2020-07-23
+Last-Update: 2020-11-08
 
 --- a/compile.sh
 +++ b/compile.sh
@@ -34,14 +33,13 @@ Last-Update: 2020-07-23
  display "Build successful! Binary is here: ${BAZEL}"
 --- a/src/package-bazel.sh
 +++ b/src/package-bazel.sh
-@@ -100,6 +100,11 @@
+@@ -100,6 +100,10 @@
  # Zero timestamps.
  (cd $PACKAGE_DIR; xargs touch -t 198001010000.00) < files.list
  
-+# Hardcoding package install path since build variables are not preserved here
-+(cd $PACKAGE_DIR; cp -r -t "/build/bazel-bootstrap-3.4.0+ds/output/usr/share/bazel" *)
-+cp debian/bazelrc /build/bazel-bootstrap-3.4.0+ds/output/etc/bazel/bazelrc
-+cp scripts/packages/bazel.sh /build/bazel-bootstrap-3.4.0+ds/output/usr/bin/bazel
++(cd $PACKAGE_DIR; cp -r -t "${WORKDIR}/output/usr/share/bazel" *)
++cp debian/bazelrc ${WORKDIR}/output/etc/bazel/bazelrc
++cp scripts/packages/bazel.sh ${WORKDIR}/output/usr/bin/bazel
 +
  if [[ "$DEV_BUILD" -eq 1 ]]; then
    # Create output zip with lowest compression, but fast.
