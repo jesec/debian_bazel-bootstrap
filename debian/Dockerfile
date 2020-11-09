@@ -3,10 +3,7 @@ FROM debian:sid-slim
 RUN apt-get update && apt-get install -y --no-install-recommends \
   devscripts \
   equivs \
-  wget \
   quilt
-RUN wget https://people.debian.org/~crusoe/bazel/libchecker-framework-java_3.0.1+ds-1~0bazel_all.deb
-RUN apt-get install ./libchecker-framework-java_3.0.1+ds-1~0bazel_all.deb
 COPY . /src
 WORKDIR /src
 RUN mkdir -p /usr/share/man/man1 # needed due to using a "-slim" image that otherwise does not have manpages
