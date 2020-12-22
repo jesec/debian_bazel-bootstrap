@@ -1,3 +1,12 @@
+bazel-bootstrap (3.4.0+ds-3) unstable; urgency=medium
+
+  * Update standards to 4.5.1 (no changes)
+  * Update Maintainer to team Launchpad email address
+    - Since l.d.o email address is still not available
+    - Retain tracker.d.o email in Uploaders field
+
+ -- Olek Wojnar <olek@debian.org>  Tue, 22 Dec 2020 15:18:48 -0500
+
 bazel-bootstrap (3.4.0+ds-2) unstable; urgency=high
 
   * Fix sandbox path option

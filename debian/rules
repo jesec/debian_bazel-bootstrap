@@ -28,10 +28,10 @@ export EXTRA_BAZEL_ARGS = \
 	--noremote_accept_cached \
 	--verbose_failures \
 	--compilation_mode dbg \
-	--sandbox_debug \
-	--sandbox_writable_path=${HOME}/.ccache/tmp \
 	--action_env=CCACHE_DISABLE \
 	--action_env=CCACHE_TEMPDIR \
+	--sandbox_debug \
+	--sandbox_writable_path=${CCACHE_TEMPDIR} \
 	--override_repository=com_google_protobuf=${CURDIR}/tools/distributions/debian/protobuf \
 	--override_repository=remote_java_tools_linux=${CURDIR}/mock_repos/remote_java_tools_linux \
 	--override_repository=bazel_skylib=${CURDIR}/mock_repos/bazel_skylib \
@@ -50,7 +50,7 @@ export GRPC_JAVA_PLUGIN = /usr/bin/grpc_java_plugin
 	dh $@ --with python3
 
 override_dh_auto_build:
-	mkdir -p ${CURDIR}/debian/ccachetmp
+	mkdir -p ${CCACHE_TEMPDIR}
 	./compile.sh
 
 override_dh_auto_clean:
