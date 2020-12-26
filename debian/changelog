@@ -1,13 +1,14 @@
 bazel-bootstrap (3.5.1+ds-1) unstable; urgency=high
 
-  * New upstream version (Closes: #976563)
+  * New upstream version (Closes: #976563, #978189)
     - Update patches for new version
+    - Update dependency versions
   * Update standards to 4.5.1 (no changes)
   * Update Maintainer to team Launchpad email address
     - Since l.d.o email address is still not available
     - Retain tracker.d.o email in Uploaders field
 
- -- Olek Wojnar <olek@debian.org>  Sat, 26 Dec 2020 14:56:06 -0500
+ -- Olek Wojnar <olek@debian.org>  Sat, 26 Dec 2020 16:52:13 -0500
 
 bazel-bootstrap (3.4.0+ds-2) unstable; urgency=high
 
