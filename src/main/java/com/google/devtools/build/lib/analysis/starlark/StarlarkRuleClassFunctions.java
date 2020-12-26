@@ -45,6 +45,7 @@ import com.google.devtools.build.lib.analysis.test.TestConfiguration;
 import com.google.devtools.build.lib.cmdline.Label;
 import com.google.devtools.build.lib.cmdline.LabelSyntaxException;
 import com.google.devtools.build.lib.cmdline.LabelValidator;
+import com.google.devtools.build.lib.cmdline.PackageIdentifier;
 import com.google.devtools.build.lib.cmdline.RepositoryName;
 import com.google.devtools.build.lib.packages.Attribute;
 import com.google.devtools.build.lib.packages.Attribute.StarlarkComputedDefaultTemplate;
@@ -79,7 +80,8 @@ import com.google.devtools.build.lib.packages.TestSize;
 import com.google.devtools.build.lib.packages.Type;
 import com.google.devtools.build.lib.packages.Type.ConversionException;
 import com.google.devtools.build.lib.skyframe.serialization.autocodec.AutoCodec;
-import com.google.devtools.build.lib.skylarkbuildapi.StarlarkRuleFunctionsApi;
+import com.google.devtools.build.lib.starlarkbuildapi.StarlarkRuleFunctionsApi;
+import com.google.devtools.build.lib.syntax.Debug;
 import com.google.devtools.build.lib.syntax.Dict;
 import com.google.devtools.build.lib.syntax.EvalException;
 import com.google.devtools.build.lib.syntax.Identifier;
@@ -97,6 +99,7 @@ import com.google.devtools.build.lib.util.Pair;
 import java.util.Collection;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
+import javax.annotation.Nullable;
 
 /** A helper class to provide an easier API for Starlark rule definitions. */
 public class StarlarkRuleClassFunctions implements StarlarkRuleFunctionsApi<Artifact> {
@@ -323,7 +326,7 @@ public class StarlarkRuleClassFunctions implements StarlarkRuleFunctionsApi<Arti
             new StarlarkCallbackHelper(
                 (StarlarkFunction) implicitOutputs, thread.getSemantics(), bazelContext);
         builder.setImplicitOutputsFunction(
-            new StarlarkImplicitOutputsFunctionWithCallback(callback, thread.getCallerLocation()));
+            new StarlarkImplicitOutputsFunctionWithCallback(callback));
       } else {
         builder.setImplicitOutputsFunction(
             new StarlarkImplicitOutputsFunctionWithMap(
@@ -346,11 +349,20 @@ public class StarlarkRuleClassFunctions implements StarlarkRuleFunctionsApi<Arti
         .requiresHostConfigurationFragmentsByStarlarkBuiltinName(
             Sequence.cast(hostFragments, String.class, "host_fragments"));
     builder.setConfiguredTargetFunction(implementation);
-    // Information about the .bzl module containing the call that created the rule class.
+    // Obtain the rule definition environment (RDE) from the .bzl module being initialized by the
+    // calling thread -- the label and transitive source digest of the .bzl module of the outermost
+    // function in the call stack.
+    //
+    // If this thread is initializing a BUILD file, then the toplevel function's Module has
+    // no BazelModuleContext. Such rules cannot be instantiated, so it's ok to use a
+    // dummy label and RDE in that case (but not to crash).
     BazelModuleContext bzlModule =
-        (BazelModuleContext) Module.ofInnermostEnclosingStarlarkFunction(thread).getClientData();
+        BazelModuleContext.of(getModuleOfOutermostStarlarkFunction(thread));
     builder.setRuleDefinitionEnvironmentLabelAndDigest(
-        bzlModule.label(), bzlModule.bzlTransitiveDigest());
+        bzlModule != null
+            ? bzlModule.label()
+            : Label.createUnvalidated(PackageIdentifier.EMPTY_PACKAGE_ID, "dummy_label"),
+        bzlModule != null ? bzlModule.bzlTransitiveDigest() : new byte[0]);
 
     builder.addRequiredToolchains(parseToolchains(toolchains, thread));
     builder.useToolchainTransition(useToolchainTransition);
@@ -405,6 +417,20 @@ public class StarlarkRuleClassFunctions implements StarlarkRuleFunctionsApi<Arti
     return new StarlarkRuleFunction(builder, type, attributes, thread.getCallerLocation());
   }
 
+  /**
+   * Returns the module (file) of the outermost enclosing Starlark function on the call stack or
+   * null if none of the active calls are functions defined in Starlark.
+   */
+  @Nullable
+  private static Module getModuleOfOutermostStarlarkFunction(StarlarkThread thread) {
+    for (Debug.Frame fr : Debug.getCallStack(thread)) {
+      if (fr.getFunction() instanceof StarlarkFunction) {
+        return ((StarlarkFunction) fr.getFunction()).getModule();
+      }
+    }
+    return null;
+  }
+
   private static void checkAttributeName(String name) throws EvalException {
     if (!Identifier.isValid(name)) {
       throw Starlark.errorf("attribute name `%s` is not a valid identifier.", name);
@@ -434,7 +460,7 @@ public class StarlarkRuleClassFunctions implements StarlarkRuleFunctionsApi<Arti
     try {
       builder.addAttribute(attribute);
     } catch (IllegalStateException ex) {
-      throw new EvalException(null, ex);
+      throw new EvalException(ex);
     }
   }
 
@@ -500,7 +526,7 @@ public class StarlarkRuleClassFunctions implements StarlarkRuleFunctionsApi<Arti
       String attrName = STRING.convert(attributeAspect, "attr_aspects");
 
       if (attrName.equals("*") && attributeAspects.size() != 1) {
-        throw new EvalException(null, "'*' must be the only string in 'attr_aspects' list");
+        throw new EvalException("'*' must be the only string in 'attr_aspects' list");
       }
 
       if (!attrName.startsWith("_")) {
@@ -528,7 +554,6 @@ public class StarlarkRuleClassFunctions implements StarlarkRuleFunctionsApi<Arti
       if (!Attribute.isImplicit(nativeName) && !Attribute.isLateBound(nativeName)) {
         if (!attribute.checkAllowedValues() || attribute.getType() != Type.STRING) {
           throw new EvalException(
-              null,
               String.format(
                   "Aspect parameter attribute '%s' must have type 'string' and use the "
                       + "'values' restriction.",
@@ -541,7 +566,6 @@ public class StarlarkRuleClassFunctions implements StarlarkRuleFunctionsApi<Arti
           Object defaultVal = attribute.getDefaultValue(null);
           if (!allowed.apply(defaultVal)) {
             throw new EvalException(
-                null,
                 String.format(
                     "Aspect parameter attribute '%s' has a bad default value: %s",
                     nativeName, allowed.getErrorReason(defaultVal)));
@@ -550,7 +574,7 @@ public class StarlarkRuleClassFunctions implements StarlarkRuleFunctionsApi<Arti
       } else if (!hasDefault) { // Implicit or late bound attribute
         String starlarkName = "_" + nativeName.substring(1);
         throw new EvalException(
-            null, String.format("Aspect attribute '%s' has no default value.", starlarkName));
+            String.format("Aspect attribute '%s' has no default value.", starlarkName));
       }
       if (attribute.getDefaultValueUnchecked() instanceof StarlarkComputedDefaultTemplate) {
         // Attributes specifying dependencies using computed value are currently not supported.
@@ -561,7 +585,6 @@ public class StarlarkRuleClassFunctions implements StarlarkRuleFunctionsApi<Arti
         // however {Conservative,Precise}AspectResolver can probably be improved to make that work.
         String starlarkName = "_" + nativeName.substring(1);
         throw new EvalException(
-            null,
             String.format(
                 "Aspect attribute '%s' (%s) with computed default value is unsupported.",
                 starlarkName, attribute.getType()));
@@ -572,7 +595,6 @@ public class StarlarkRuleClassFunctions implements StarlarkRuleFunctionsApi<Arti
     for (Object o : providesArg) {
       if (!StarlarkAttrModule.isProvider(o)) {
         throw new EvalException(
-            null,
             String.format(
                 "Illegal argument: element in 'provides' is of unexpected type. "
                     + "Should be list of providers, but got item of type %s. ",
@@ -645,11 +667,11 @@ public class StarlarkRuleClassFunctions implements StarlarkRuleFunctionsApi<Arti
     public Object call(StarlarkThread thread, Tuple<Object> args, Dict<String, Object> kwargs)
         throws EvalException, InterruptedException, ConversionException {
       if (!args.isEmpty()) {
-        throw new EvalException(null, "unexpected positional arguments");
+        throw new EvalException("unexpected positional arguments");
       }
       BazelStarlarkContext.from(thread).checkLoadingPhase(getName());
       if (ruleClass == null) {
-        throw new EvalException(null, "Invalid rule class hasn't been exported by a bzl file");
+        throw new EvalException("Invalid rule class hasn't been exported by a bzl file");
       }
 
       for (Attribute attribute : ruleClass.getAttributes()) {
@@ -673,14 +695,13 @@ public class StarlarkRuleClassFunctions implements StarlarkRuleFunctionsApi<Arti
         PackageContext pkgContext = thread.getThreadLocal(PackageContext.class);
         if (pkgContext == null) {
           throw new EvalException(
-              null,
               "Cannot instantiate a rule when loading a .bzl file. "
                   + "Rules may be instantiated only in a BUILD thread.");
         }
         RuleFactory.createAndAddRule(
             pkgContext, ruleClass, attributeValues, thread.getSemantics(), thread.getCallStack());
       } catch (InvalidRuleException | NameConflictException e) {
-        throw new EvalException(null, e.getMessage());
+        throw new EvalException(e);
       }
       return Starlark.NONE;
     }
@@ -872,8 +893,7 @@ public class StarlarkRuleClassFunctions implements StarlarkRuleFunctionsApi<Arti
     } else {
       // This is the label of the innermost BUILD/.bzl file on the current call stack.
       parentLabel =
-          ((BazelModuleContext) Module.ofInnermostEnclosingStarlarkFunction(thread).getClientData())
-              .label();
+          BazelModuleContext.of(Module.ofInnermostEnclosingStarlarkFunction(thread)).label();
     }
 
     try {

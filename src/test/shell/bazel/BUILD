@@ -179,6 +179,30 @@ sh_test(
 )
 
 sh_test(
+    name = "bazel_java14_test",
+    srcs = ["bazel_java14_test.sh"],
+    args = [
+        # --java_toolchain and --host_java_toolchain values
+        "@local_java_tools//:toolchain_jdk_14",
+        # java_tools zip to test
+        "src/java_tools_java14.zip",
+    ] + select({
+        # --javabase and --host_javabase values
+        "//src/conditions:darwin": ["@openjdk14_darwin_archive//:runtime"],
+        "//src/conditions:darwin_x86_64": ["@openjdk14_darwin_archive//:runtime"],
+        "//src/conditions:windows": ["@openjdk14_windows_archive//:runtime"],
+        "//src/conditions:linux_x86_64": ["@openjdk14_linux_archive//:runtime"],
+    }),
+    data = [
+        ":test-deps",
+        "//src:java_tools_java14_zip",
+        "//src/test/shell/bazel/testdata:jdk_http_archives_filegroup",
+        "@bazel_tools//tools/bash/runfiles",
+    ],
+    tags = ["local"],
+)
+
+sh_test(
     name = "bazel_java_test",
     # TODO(iirina): Investigate if the 'large' and 'eternal' values still apply.
     size = "large",
@@ -196,7 +220,7 @@ sh_test(
     exec_compatible_with = ["//:highcpu_machine"],
 )
 
-JAVA_VERSIONS = ("11",)
+JAVA_VERSIONS = ("11", "14")
 
 [
     sh_test(
@@ -911,6 +935,18 @@ sh_test(
 )
 
 sh_test(
+    name = "persistent_test_runner_test",
+    size = "large",
+    srcs = ["persistent_test_runner_test.sh"],
+    data = [
+        ":test-deps",
+    ],
+    tags = [
+        "no_windows",
+    ],
+)
+
+sh_test(
     name = "bazel_workspace_status_test",
     size = "large",
     srcs = ["bazel_workspace_status_test.sh"],
@@ -992,6 +1028,27 @@ sh_test(
     ],
     exec_compatible_with = ["//:highcpu_machine"],
     tags = ["block-network"],
+)
+
+sh_test(
+    name = "bazel_bootstrap_distfile_tar_test",
+    timeout = "eternal",
+    srcs = ["bazel_bootstrap_distfile_test.sh"],
+    args = [
+        "$(location //:bazel-distfile-tar)",
+        "$(location //src:embedded_jdk_allmodules_cached)",
+    ],
+    data = [
+        ":test-deps",
+        "//:bazel-distfile-tar",
+        "//src:embedded_jdk_allmodules_cached",
+        "@bazel_tools//tools/bash/runfiles",
+    ],
+    exec_compatible_with = ["//:highcpu_machine"],
+    tags = [
+        "block-network",
+        "no_windows",
+    ],
 )
 
 sh_test(

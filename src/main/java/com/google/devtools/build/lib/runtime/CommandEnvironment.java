@@ -318,6 +318,7 @@ public class CommandEnvironment {
     return directories;
   }
 
+  @Nullable
   public PathPackageLocator getPackageLocator() {
     return packageLocator;
   }
@@ -688,7 +689,8 @@ public class CommandEnvironment {
    *
    * @throws AbruptExitException if this command is unsuitable to be run as specified
    */
-  void beforeCommand(InvocationPolicy invocationPolicy) throws AbruptExitException {
+  @VisibleForTesting
+  public void beforeCommand(InvocationPolicy invocationPolicy) throws AbruptExitException {
     CommonCommandOptions commonOptions = options.getOptions(CommonCommandOptions.class);
     eventBus.post(new BuildMetadataEvent(makeMapFromMapEntries(commonOptions.buildMetadata)));
     eventBus.post(

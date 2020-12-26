@@ -332,6 +332,7 @@ public class AndroidBinaryTest extends AndroidBuildViewTestCase {
         ")");
 
     ConfiguredTarget app = getConfiguredTarget("//java/a:a");
+    assertNoEvents();
 
     Artifact copiedLib = getOnlyElement(getNativeLibrariesInApk(app));
     Artifact linkedLib = getGeneratingAction(copiedLib).getInputs().getSingleton();
@@ -3742,30 +3743,6 @@ public class AndroidBinaryTest extends AndroidBuildViewTestCase {
   }
 
   @Test
-  public void testDebugKeyExistsBinary() throws Exception {
-    String debugKeyTarget = "//java/com/google/android/hello:debug_keystore";
-    scratch.file("java/com/google/android/hello/debug_keystore", "A debug key");
-    scratch.file(
-        "java/com/google/android/hello/BUILD",
-        "android_binary(name = 'b',",
-        "               srcs = ['HelloApp.java'],",
-        "               manifest = 'AndroidManifest.xml',",
-        "               debug_key = '" + debugKeyTarget + "')");
-    checkDebugKey(debugKeyTarget, true);
-  }
-
-  @Test
-  public void testDebugKeyNotExistsBinary() throws Exception {
-    String debugKeyTarget = "//java/com/google/android/hello:debug_keystore";
-    scratch.file(
-        "java/com/google/android/hello/BUILD",
-        "android_binary(name = 'b',",
-        "               srcs = ['HelloApp.java'],",
-        "               manifest = 'AndroidManifest.xml')");
-    checkDebugKey(debugKeyTarget, false);
-  }
-
-  @Test
   public void testOnlyProguardSpecs() throws Exception {
     scratch.file(
         "java/com/google/android/hello/BUILD",
@@ -3789,6 +3766,7 @@ public class AndroidBinaryTest extends AndroidBuildViewTestCase {
         "b_proguard.jar",
         false,
         null,
+        /*splitOptimizationPass=*/ false,
         targetConfig.getBinFragment()
             + "/java/com/google/android/hello/proguard/b/legacy_b_combined_library_jars.jar");
   }
@@ -3928,7 +3906,12 @@ public class AndroidBinaryTest extends AndroidBuildViewTestCase {
         "               proguard_specs = ['proguard-spec.pro'],",
         "               proguard_generate_mapping = 1)");
     checkProguardUse(
-        "//java/com/google/android/hello:b", "b_proguard.jar", true, null, getAndroidJarPath());
+        "//java/com/google/android/hello:b",
+        "b_proguard.jar",
+        true,
+        null,
+        /*splitOptimizationPass=*/ false,
+        getAndroidJarPath());
   }
 
   @Test
@@ -3980,7 +3963,12 @@ public class AndroidBinaryTest extends AndroidBuildViewTestCase {
         "               manifest = 'AndroidManifest.xml',",
         "               proguard_specs = ['proguard-spec.pro'])");
     checkProguardUse(
-        "//java/com/google/android/hello:b", "b_proguard.jar", false, null, getAndroidJarPath());
+        "//java/com/google/android/hello:b",
+        "b_proguard.jar",
+        false,
+        null,
+        /*splitOptimizationPass=*/ false,
+        getAndroidJarPath());
 
     SpawnAction action =
         (SpawnAction)
@@ -4006,7 +3994,12 @@ public class AndroidBinaryTest extends AndroidBuildViewTestCase {
         "               manifest = 'AndroidManifest.xml',",
         "               proguard_specs = ['proguard-spec.pro'])");
     checkProguardUse(
-        "//java/com/google/android/hello:b", "b_proguard.jar", false, null, getAndroidJarPath());
+        "//java/com/google/android/hello:b",
+        "b_proguard.jar",
+        false,
+        null,
+        /*splitOptimizationPass=*/ false,
+        getAndroidJarPath());
 
     SpawnAction action =
         (SpawnAction)
@@ -4327,6 +4320,7 @@ public class AndroidBinaryTest extends AndroidBuildViewTestCase {
         "abin_proguard.jar",
         /*expectMapping=*/ false,
         /*passes=*/ null,
+        /*splitOptimizationPass=*/ false,
         getAndroidJarPath());
   }
 

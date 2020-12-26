@@ -13,26 +13,33 @@
 // limitations under the License.
 package com.google.devtools.build.lib.syntax;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Iterables;
 import com.google.errorprone.annotations.CheckReturnValue;
+import com.google.errorprone.annotations.DoNotCall;
 import com.google.errorprone.annotations.FormatMethod;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.lang.reflect.Method;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeSet;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.Immutable;
 import net.starlark.java.annot.StarlarkBuiltin;
 import net.starlark.java.annot.StarlarkInterfaceUtils;
+import net.starlark.java.annot.StarlarkMethod;
+import net.starlark.java.spelling.SpellChecker;
 
 /**
  * The Starlark class defines the most important entry points, constants, and functions needed by
  * all clients of the Starlark interpreter.
  */
-// TODO(adonovan): move these here: equal, compare, getattr, index, parse, exec, eval, and so on.
+// TODO(adonovan): move these here: equal, compare, index, parse, exec, eval, and so on.
 public final class Starlark {
 
   private Starlark() {} // uninstantiable
@@ -109,7 +116,7 @@ public final class Starlark {
    * {@link #NONE}. Any other non-Starlark value causes the function to throw
    * IllegalArgumentException.
    *
-   * <p>This function is applied to the results of @StarlarkMethod-annotated Java methods.
+   * <p>This function is applied to the results of StarlarkMethod-annotated Java methods.
    */
   public static Object fromJava(Object x, @Nullable Mutability mutability) {
     if (x == null) {
@@ -234,6 +241,23 @@ public final class Starlark {
       return "int";
     } else if (c.equals(Boolean.class)) {
       return "bool";
+    }
+
+    // Shortcut for the most common types.
+    // These cases can be handled by `getStarlarkBuiltin`
+    // but `getStarlarkBuiltin` is quite expensive.
+    if (c.equals(StarlarkList.class)) {
+      return "list";
+    } else if (c.equals(Tuple.class)) {
+      return "tuple";
+    } else if (c.equals(Dict.class)) {
+      return "dict";
+    } else if (c.equals(NoneType.class)) {
+      return "NoneType";
+    } else if (c.equals(StarlarkFunction.class)) {
+      return "function";
+    } else if (c.equals(RangeList.class)) {
+      return "range";
     }
 
     StarlarkBuiltin module = StarlarkInterfaceUtils.getStarlarkBuiltin(c);
@@ -385,12 +409,11 @@ public final class Starlark {
   /**
    * Calls the function-like value {@code fn} in the specified thread, passing it the given
    * positional and named arguments, as if by the Starlark expression {@code fn(*args, **kwargs)}.
+   *
+   * <p>See also {@link #fastcall}.
    */
   public static Object call(
-      StarlarkThread thread,
-      Object fn,
-      List<Object> args,
-      Map<String, Object> kwargs)
+      StarlarkThread thread, Object fn, List<Object> args, Map<String, Object> kwargs)
       throws EvalException, InterruptedException {
     Object[] named = new Object[2 * kwargs.size()];
     int i = 0;
@@ -406,6 +429,12 @@ public final class Starlark {
    * positional and named arguments in the "fastcall" array representation.
    *
    * <p>The caller must not subsequently modify or even inspect the two arrays.
+   *
+   * <p>If the call throws a StackOverflowError or any instance of RuntimeException (other than
+   * UncheckedEvalException), regardless of whether it originates in a user-defined built-in
+   * function or a bug in the interpreter itself, the exception is wrapped by an
+   * UncheckedEvalException whose message includes the Starlark stack. The original exception may be
+   * retrieved using {@code getCause}.
    */
   public static Object fastcall(
       StarlarkThread thread, Object fn, Object[] positional, Object[] named)
@@ -426,8 +455,40 @@ public final class Starlark {
     thread.push(callable);
     try {
       return callable.fastcall(thread, positional, named);
+    } catch (UncheckedEvalException ex) {
+      throw ex; // already wrapped
+    } catch (RuntimeException | StackOverflowError ex) {
+      throw new UncheckedEvalException(ex, thread.getCallStack());
+    } catch (EvalException ex) {
+      // If this exception was newly thrown, set its stack.
+      throw ex.ensureStack(thread);
     } finally {
       thread.pop();
+    }
+  }
+
+  /**
+   * An UncheckedEvalException decorates an unchecked exception with its Starlark stack, to help
+   * maintainers locate problematic source expressions. The original exception can be retrieved
+   * using {@code getCause}.
+   */
+  public static final class UncheckedEvalException extends RuntimeException {
+    private final ImmutableList<StarlarkThread.CallStackEntry> stack;
+
+    private UncheckedEvalException(
+        Throwable cause, ImmutableList<StarlarkThread.CallStackEntry> stack) {
+      super(cause);
+      this.stack = stack;
+    }
+
+    /** Returns the stack of Starlark calls active at the moment of the error. */
+    public ImmutableList<StarlarkThread.CallStackEntry> getCallStack() {
+      return stack;
+    }
+
+    @Override
+    public String getMessage() {
+      return String.format("%s (Starlark stack: %s)", super.getMessage(), stack);
     }
   }
 
@@ -439,7 +500,125 @@ public final class Starlark {
   @FormatMethod
   @CheckReturnValue // don't forget to throw it
   public static EvalException errorf(String format, Object... args) {
-    return new EvalException(null, String.format(format, args));
+    return new EvalException(String.format(format, args));
+  }
+
+  // --- methods related to attributes (fields and methods) ---
+
+  /**
+   * Reports whether the value {@code x} has a field or method of the given name, as if by the
+   * Starlark expression {@code hasattr(x, name)}.
+   */
+  public static boolean hasattr(StarlarkSemantics semantics, Object x, String name)
+      throws EvalException {
+    return (x instanceof ClassObject && ((ClassObject) x).getValue(name) != null)
+        || CallUtils.getAnnotatedMethodNames(semantics, x.getClass()).contains(name);
+  }
+
+  /**
+   * Returns the named field or method of value {@code x}, as if by the Starlark expression {@code
+   * getattr(x, name, defaultValue)}. If the value has no such attribute, getattr returns {@code
+   * defaultValue} if non-null, or throws an EvalException otherwise.
+   */
+  public static Object getattr(
+      Mutability mu,
+      StarlarkSemantics semantics,
+      Object x,
+      String name,
+      @Nullable Object defaultValue)
+      throws EvalException, InterruptedException {
+    // StarlarkMethod-annotated field or method?
+    MethodDescriptor method = CallUtils.getAnnotatedMethod(semantics, x.getClass(), name);
+    if (method != null) {
+      if (method.isStructField()) {
+        return method.callField(x, semantics, mu);
+      } else {
+        return new BuiltinCallable(x, name, method);
+      }
+    }
+
+    // user-defined field?
+    if (x instanceof ClassObject) {
+      ClassObject obj = (ClassObject) x;
+      Object field = obj.getValue(semantics, name);
+      if (field != null) {
+        return Starlark.checkValid(field);
+      }
+
+      if (defaultValue != null) {
+        return defaultValue;
+      }
+
+      String error = obj.getErrorMessageForUnknownField(name);
+      if (error != null) {
+        throw Starlark.errorf("%s", error);
+      }
+
+    } else if (defaultValue != null) {
+      return defaultValue;
+    }
+
+    throw Starlark.errorf(
+        "'%s' value has no field or method '%s'%s",
+        Starlark.type(x), name, SpellChecker.didYouMean(name, dir(mu, semantics, x)));
+  }
+
+  /**
+   * Returns a new sorted list containing the names of the Starlark-accessible fields and methods of
+   * the specified value, as if by the Starlark expression {@code dir(x)}.
+   */
+  public static StarlarkList<String> dir(Mutability mu, StarlarkSemantics semantics, Object x) {
+    // Order the fields alphabetically.
+    Set<String> fields = new TreeSet<>();
+    if (x instanceof ClassObject) {
+      fields.addAll(((ClassObject) x).getFieldNames());
+    }
+    fields.addAll(CallUtils.getAnnotatedMethodNames(semantics, x.getClass()));
+    return StarlarkList.copyOf(mu, fields);
+  }
+
+  // --- methods related to StarlarkMethod-annotated classes ---
+
+  /**
+   * Returns the value of the named field of Starlark value {@code x}, as defined by a Java method
+   * with a {@code StarlarkMethod(structField=true)} annotation.
+   *
+   * <p>Most callers should use {@link #getattr} instead.
+   */
+  public static Object getAnnotatedField(StarlarkSemantics semantics, Object x, String name)
+      throws EvalException, InterruptedException {
+    return CallUtils.getAnnotatedField(semantics, x, name);
+  }
+
+  /**
+   * Returns the names of the fields of Starlark value {@code x}, as defined by Java methods with
+   * {@code StarlarkMethod(structField=true)} annotations under the specified semantics.
+   *
+   * <p>Most callers should use {@link #dir} instead.
+   */
+  public static ImmutableSet<String> getAnnotatedFieldNames(StarlarkSemantics semantics, Object x) {
+    return CallUtils.getAnnotatedFieldNames(semantics, x);
+  }
+
+  /**
+   * Returns a map from annotated methods of the specified class to their corresponding {@link
+   * StarlarkMethod} annotations. Elements are ordered by Java method name, which is not necessarily
+   * the same as the Starlark attribute name.
+   *
+   * <p>Most callers should use {@link #dir} and {@link #getattr} instead.
+   */
+  public static ImmutableMap<Method, StarlarkMethod> getAnnotatedMethods(Class<?> clazz) {
+    return CallUtils.getAnnotatedMethods(clazz);
+  }
+
+  /**
+   * Returns the {@code StarlarkMethod(selfCall=true)}-annotated Java method of the specified Java
+   * class that is called when Starlark calls an instance of that class like a function. It returns
+   * null if no such method exists.
+   */
+  @Nullable
+  public static Method getSelfCallMethod(StarlarkSemantics semantics, Class<?> clazz) {
+    return CallUtils.getSelfCallMethod(semantics, clazz);
   }
 
   /** Equivalent to {@code addMethods(env, v, StarlarkSemantics.DEFAULT)}. */
@@ -460,9 +639,9 @@ public final class Starlark {
       throw new IllegalArgumentException(
           cls.getName() + " is annotated with neither @StarlarkGlobalLibrary nor @StarlarkBuiltin");
     }
-    for (String name : CallUtils.getMethodNames(semantics, v.getClass())) {
+    for (String name : CallUtils.getAnnotatedMethodNames(semantics, v.getClass())) {
       // We use the 2-arg (desc=null) BuiltinCallable constructor instead of passing
-      // the descriptor that CallUtils.getMethod would return,
+      // the descriptor that CallUtils.getAnnotatedMethod would return,
       // because most calls to addMethods pass StarlarkSemantics.DEFAULT,
       // which is probably incorrect for the call.
       // The effect is that the default semantics determine which methods appear in
@@ -527,6 +706,7 @@ public final class Starlark {
    * Parse the input as a file, validate it in the specified predeclared environment, compile it,
    * and execute it. On success, the module is returned; on failure, it throws an exception.
    */
+  @DoNotCall
   public static Module exec(
       StarlarkThread thread, ParserInput input, Map<String, Object> predeclared)
       throws SyntaxError.Exception, EvalException, InterruptedException {
@@ -546,6 +726,7 @@ public final class Starlark {
    * evaluate it. On success, the expression's value is returned; on failure, it throws an
    * exception.
    */
+  @DoNotCall
   public static Object eval(StarlarkThread thread, ParserInput input, Map<String, Object> env)
       throws SyntaxError.Exception, EvalException, InterruptedException {
     // Pseudocode:
@@ -579,6 +760,7 @@ public final class Starlark {
    * <p>A REPL will typically set the legacy "load binds globally" semantics flag, otherwise the
    * names bound by a load statement will not be visible in the next REPL chunk.
    */
+  @DoNotCall
   public static ModuleAndValue execAndEval(
       StarlarkThread thread, ParserInput input, Map<String, Object> predeclared)
       throws SyntaxError.Exception {
@@ -616,6 +798,7 @@ public final class Starlark {
    * <p>In addition to the program, it returns the validated syntax tree. This permits clients such
    * as Bazel to inspect the syntax (for BUILD dialect checks, glob prefetching, etc.)
    */
+  @DoNotCall
   public static Object /*Pair<Program, StarlarkFile>*/ compileFile(
       ParserInput input, //
       Set<String> predeclared,

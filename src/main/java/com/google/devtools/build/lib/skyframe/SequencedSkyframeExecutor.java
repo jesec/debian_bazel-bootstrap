@@ -283,9 +283,7 @@ public final class SequencedSkyframeExecutor extends SkyframeExecutor {
     }
 
     return ArtifactNestedSetFunction.sizeThresholdUpdated(
-            buildRequestOptions.nestedSetAsSkyKeyThreshold)
-        || ArtifactNestedSetFunction.evalKeysAsOneGroupUpdated(
-            buildRequestOptions.nsosEvalKeysAsOneGroup);
+        buildRequestOptions.nestedSetAsSkyKeyThreshold);
   }
 
   /**
@@ -496,7 +494,7 @@ public final class SequencedSkyframeExecutor extends SkyframeExecutor {
         EvaluationContext.newBuilder()
             .setKeepGoing(false)
             .setNumThreads(DEFAULT_THREAD_COUNT)
-            .setEventHander(eventHandler)
+            .setEventHandler(eventHandler)
             .build();
     getDriver().evaluate(ImmutableList.of(), evaluationContext);
 
@@ -917,7 +915,7 @@ public final class SequencedSkyframeExecutor extends SkyframeExecutor {
                   EvaluationContext.newBuilder()
                       .setKeepGoing(false)
                       .setNumThreads(ResourceUsage.getAvailableProcessors())
-                      .setEventHander(eventHandler)
+                      .setEventHandler(eventHandler)
                       .build();
               getDriver().evaluate(ImmutableList.of(), evaluationContext);
               return null;
@@ -1037,7 +1035,7 @@ public final class SequencedSkyframeExecutor extends SkyframeExecutor {
         EvaluationContext.newBuilder()
             .setKeepGoing(false)
             .setNumThreads(DEFAULT_THREAD_COUNT)
-            .setEventHander(eventHandler)
+            .setEventHandler(eventHandler)
             .build();
     return getDriver().evaluate(ImmutableSet.of(key), evaluationContext).get(key);
   }
@@ -1054,11 +1052,11 @@ public final class SequencedSkyframeExecutor extends SkyframeExecutor {
    * constructed (if the default value can be provided for the new argument in Builder).
    */
   public static final class Builder {
-    protected PackageFactory pkgFactory;
-    protected FileSystem fileSystem;
-    protected BlazeDirectories directories;
-    protected ActionKeyContext actionKeyContext;
-    protected BuildOptions defaultBuildOptions;
+    PackageFactory pkgFactory;
+    FileSystem fileSystem;
+    BlazeDirectories directories;
+    ActionKeyContext actionKeyContext;
+    BuildOptions defaultBuildOptions;
     private CrossRepositoryLabelViolationStrategy crossRepositoryLabelViolationStrategy;
     private ImmutableList<BuildFileName> buildFilesByPriority;
     private ExternalPackageHelper externalPackageHelper;

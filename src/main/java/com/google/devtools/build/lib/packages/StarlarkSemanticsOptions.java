@@ -64,28 +64,6 @@ public class StarlarkSemanticsOptions extends OptionsBase implements Serializabl
   // <== Add new options here in alphabetic order ==>
 
   @Option(
-      name = "experimental_action_args",
-      defaultValue = "true",
-      documentationCategory = OptionDocumentationCategory.STARLARK_SEMANTICS,
-      effectTags = {OptionEffectTag.BAZEL_INTERNAL_CONFIGURATION},
-      metadataTags = {OptionMetadataTag.EXPERIMENTAL},
-      help =
-          "If set to true, Action objects support an `args` field: "
-              + "a frozen Args object which contains all action arguments.")
-  public boolean experimentalActionArgs;
-
-  @Option(
-      name = "experimental_allow_incremental_repository_updates",
-      defaultValue = "true",
-      documentationCategory = OptionDocumentationCategory.STARLARK_SEMANTICS,
-      effectTags = {OptionEffectTag.BAZEL_INTERNAL_CONFIGURATION},
-      metadataTags = {OptionMetadataTag.EXPERIMENTAL},
-      help =
-          "This flag will be removed in Bazel 1.0. Please do not use it.\n"
-              + "Incremental repository updates feature is now enabled without the flag.")
-  public boolean experimentalAllowIncrementalRepositoryUpdates;
-
-  @Option(
       name = "experimental_build_setting_api",
       defaultValue = "true",
       documentationCategory = OptionDocumentationCategory.UNDOCUMENTED,
@@ -177,15 +155,6 @@ public class StarlarkSemanticsOptions extends OptionsBase implements Serializabl
           "If set to true, enables creation of configuration transition objects (the "
               + "`transition()` function) in Starlark.")
   public boolean experimentalStarlarkConfigTransitions;
-
-  @Option(
-      name = "experimental_starlark_unused_inputs_list",
-      defaultValue = "true",
-      documentationCategory = OptionDocumentationCategory.STARLARK_SEMANTICS,
-      effectTags = {OptionEffectTag.CHANGES_INPUTS},
-      metadataTags = {OptionMetadataTag.EXPERIMENTAL},
-      help = "If set to true, enables use of 'unused_inputs_list' in starlark action.run().")
-  public boolean experimentalStarlarkUnusedInputsList;
 
   @Option(
       name = "experimental_cc_shared_library",
@@ -607,6 +576,18 @@ public class StarlarkSemanticsOptions extends OptionsBase implements Serializabl
   public boolean incompatibleObjcProviderRemoveCompileInfo;
 
   @Option(
+      name = "incompatible_java_common_parameters",
+      defaultValue = "false",
+      documentationCategory = OptionDocumentationCategory.STARLARK_SEMANTICS,
+      effectTags = {OptionEffectTag.BUILD_FILE_SEMANTICS},
+      metadataTags = {
+        OptionMetadataTag.INCOMPATIBLE_CHANGE,
+        OptionMetadataTag.TRIGGERED_BY_ALL_INCOMPATIBLE_CHANGES
+      },
+      help = "If set to true, the jar_file parameter in pack_sources will be removed.")
+  public boolean incompatibleJavaCommonParameters;
+
+  @Option(
       name = "max_computation_steps",
       defaultValue = "0",
       documentationCategory = OptionDocumentationCategory.STARLARK_SEMANTICS,
@@ -639,9 +620,6 @@ public class StarlarkSemanticsOptions extends OptionsBase implements Serializabl
     StarlarkSemantics semantics =
         StarlarkSemantics.builder()
             // <== Add new options here in alphabetic order ==>
-            .experimentalActionArgs(experimentalActionArgs)
-            .experimentalAllowIncrementalRepositoryUpdates(
-                experimentalAllowIncrementalRepositoryUpdates)
             .experimentalAllowTagsPropagation(experimentalAllowTagsPropagation)
             .experimentalBuiltinsBzlPath(experimentalBuiltinsBzlPath)
             .experimentalCcStarlarkApiEnabledPackages(experimentalCcStarlarkApiEnabledPackages)
@@ -650,7 +628,6 @@ public class StarlarkSemanticsOptions extends OptionsBase implements Serializabl
             .experimentalNinjaActions(experimentalNinjaActions)
             .experimentalPlatformsApi(experimentalPlatformsApi)
             .experimentalStarlarkConfigTransitions(experimentalStarlarkConfigTransitions)
-            .experimentalStarlarkUnusedInputsList(experimentalStarlarkUnusedInputsList)
             .experimentalCcSharedLibrary(experimentalCcSharedLibrary)
             .experimentalRepoRemoteExec(experimentalRepoRemoteExec)
             .experimentalDisableExternalPackage(experimentalDisableExternalPackage)
@@ -664,6 +641,7 @@ public class StarlarkSemanticsOptions extends OptionsBase implements Serializabl
             .incompatibleDisableDepsetItems(incompatibleDisableDepsetItems)
             .incompatibleDisallowEmptyGlob(incompatibleDisallowEmptyGlob)
             .incompatibleDisallowStructProviderSyntax(incompatibleDisallowStructProviderSyntax)
+            .incompatibleJavaCommonParameters(incompatibleJavaCommonParameters)
             .incompatibleNewActionsApi(incompatibleNewActionsApi)
             .incompatibleNoAttrLicense(incompatibleNoAttrLicense)
             .incompatibleNoImplicitFileExport(incompatibleNoImplicitFileExport)

@@ -119,10 +119,8 @@ public class StarlarkSemanticsConsistencyTest {
   private static StarlarkSemanticsOptions buildRandomOptions(Random rand) throws Exception {
     return parseOptions(
         // <== Add new options here in alphabetic order ==>
-        "--experimental_action_args=" + rand.nextBoolean(),
         "--experimental_disable_external_package=" + rand.nextBoolean(),
         "--experimental_sibling_repository_layout=" + rand.nextBoolean(),
-        "--experimental_allow_incremental_repository_updates=" + rand.nextBoolean(),
         "--experimental_builtins_bzl_path=" + rand.nextDouble(),
         "--experimental_cc_skylark_api_enabled_packages="
             + rand.nextDouble()
@@ -133,7 +131,6 @@ public class StarlarkSemanticsConsistencyTest {
         "--experimental_ninja_actions=" + rand.nextBoolean(),
         "--experimental_platforms_api=" + rand.nextBoolean(),
         "--experimental_starlark_config_transitions=" + rand.nextBoolean(),
-        "--experimental_starlark_unused_inputs_list=" + rand.nextBoolean(),
         "--incompatible_allow_tags_propagation=" + rand.nextBoolean(), // flag, Java names differ
         "--experimental_cc_shared_library=" + rand.nextBoolean(),
         "--experimental_repo_remote_exec=" + rand.nextBoolean(),
@@ -147,6 +144,7 @@ public class StarlarkSemanticsConsistencyTest {
         "--incompatible_disallow_empty_glob=" + rand.nextBoolean(),
         "--incompatible_disallow_struct_provider_syntax=" + rand.nextBoolean(),
         "--incompatible_do_not_split_linking_cmdline=" + rand.nextBoolean(),
+        "--incompatible_java_common_parameters=" + rand.nextBoolean(),
         "--incompatible_linkopts_to_linklibs=" + rand.nextBoolean(),
         "--incompatible_new_actions_api=" + rand.nextBoolean(),
         "--incompatible_no_attr_license=" + rand.nextBoolean(),
@@ -172,10 +170,8 @@ public class StarlarkSemanticsConsistencyTest {
   private static StarlarkSemantics buildRandomSemantics(Random rand) {
     return StarlarkSemantics.builder()
         // <== Add new options here in alphabetic order ==>
-        .experimentalActionArgs(rand.nextBoolean())
         .experimentalDisableExternalPackage(rand.nextBoolean())
         .experimentalSiblingRepositoryLayout(rand.nextBoolean())
-        .experimentalAllowIncrementalRepositoryUpdates(rand.nextBoolean())
         .experimentalBuiltinsBzlPath(String.valueOf(rand.nextDouble()))
         .experimentalCcStarlarkApiEnabledPackages(
             ImmutableList.of(String.valueOf(rand.nextDouble()), String.valueOf(rand.nextDouble())))
@@ -184,7 +180,6 @@ public class StarlarkSemanticsConsistencyTest {
         .experimentalNinjaActions(rand.nextBoolean())
         .experimentalPlatformsApi(rand.nextBoolean())
         .experimentalStarlarkConfigTransitions(rand.nextBoolean())
-        .experimentalStarlarkUnusedInputsList(rand.nextBoolean())
         .experimentalAllowTagsPropagation(rand.nextBoolean())
         .experimentalCcSharedLibrary(rand.nextBoolean())
         .experimentalRepoRemoteExec(rand.nextBoolean())
@@ -198,6 +193,7 @@ public class StarlarkSemanticsConsistencyTest {
         .incompatibleDisallowEmptyGlob(rand.nextBoolean())
         .incompatibleDisallowStructProviderSyntax(rand.nextBoolean())
         .incompatibleDoNotSplitLinkingCmdline(rand.nextBoolean())
+        .incompatibleJavaCommonParameters(rand.nextBoolean())
         .incompatibleLinkoptsToLinkLibs(rand.nextBoolean())
         .incompatibleNewActionsApi(rand.nextBoolean())
         .incompatibleNoAttrLicense(rand.nextBoolean())

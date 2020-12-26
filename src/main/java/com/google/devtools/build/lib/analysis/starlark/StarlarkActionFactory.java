@@ -20,7 +20,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.devtools.build.lib.actions.Action;
 import com.google.devtools.build.lib.actions.ActionAnalysisMetadata;
-import com.google.devtools.build.lib.actions.ActionLookupValue;
+import com.google.devtools.build.lib.actions.ActionLookupKey;
 import com.google.devtools.build.lib.actions.ActionRegistry;
 import com.google.devtools.build.lib.actions.Artifact;
 import com.google.devtools.build.lib.actions.ArtifactRoot;
@@ -50,8 +50,8 @@ import com.google.devtools.build.lib.collect.nestedset.NestedSetBuilder;
 import com.google.devtools.build.lib.collect.nestedset.Order;
 import com.google.devtools.build.lib.packages.TargetUtils;
 import com.google.devtools.build.lib.skyframe.serialization.autocodec.AutoCodec;
-import com.google.devtools.build.lib.skylarkbuildapi.FileApi;
-import com.google.devtools.build.lib.skylarkbuildapi.StarlarkActionFactoryApi;
+import com.google.devtools.build.lib.starlarkbuildapi.FileApi;
+import com.google.devtools.build.lib.starlarkbuildapi.StarlarkActionFactoryApi;
 import com.google.devtools.build.lib.syntax.Dict;
 import com.google.devtools.build.lib.syntax.EvalException;
 import com.google.devtools.build.lib.syntax.Printer;
@@ -105,7 +105,7 @@ public class StarlarkActionFactory implements StarlarkActionFactoryApi {
       }
 
       @Override
-      public ActionLookupValue.ActionLookupKey getOwner() {
+      public ActionLookupKey getOwner() {
         return starlarkActionFactory
             .getActionConstructionContext()
             .getAnalysisEnvironment()
@@ -147,18 +147,15 @@ public class StarlarkActionFactory implements StarlarkActionFactoryApi {
     }
 
     if (!fragment.startsWith(ruleContext.getPackageDirectory())) {
-      throw new EvalException(
-          String.format(
-              "the output directory '%s' is not under package directory '%s' for target '%s'",
-              fragment, ruleContext.getPackageDirectory(), ruleContext.getLabel()));
+      throw Starlark.errorf(
+          "the output directory '%s' is not under package directory '%s' for target '%s'",
+          fragment, ruleContext.getPackageDirectory(), ruleContext.getLabel());
     }
 
     Artifact result = ruleContext.getTreeArtifact(fragment, newFileRoot());
     if (!result.isTreeArtifact()) {
-      throw new EvalException(
-          null,
-          String.format(
-              "'%s' has already been declared as a regular file, not directory.", filename));
+      throw Starlark.errorf(
+          "'%s' has already been declared as a regular file, not directory.", filename);
     }
     return result;
   }
@@ -455,10 +452,9 @@ public class StarlarkActionFactory implements StarlarkActionFactoryApi {
       List<String> command = Sequence.cast(commandList, String.class, "command");
       builder.setShellCommand(command);
     } else {
-      throw new EvalException(
-          null,
-          "expected string or list of strings for command instead of "
-              + Starlark.type(commandUnchecked));
+      throw Starlark.errorf(
+          "expected string or list of strings for command instead of %s",
+          Starlark.type(commandUnchecked));
     }
     if (argumentList.size() > 0) {
       // When we use a shell command, add an empty argument before other arguments.
@@ -497,10 +493,9 @@ public class StarlarkActionFactory implements StarlarkActionFactoryApi {
         ParamFileInfo paramFileInfo = args.getParamFileInfo();
         builder.addCommandLine(args.build(), paramFileInfo);
       } else {
-        throw new EvalException(
-            null,
-            "expected list of strings or ctx.actions.args() for arguments instead of "
-                + Starlark.type(value));
+        throw Starlark.errorf(
+            "expected list of strings or ctx.actions.args() for arguments instead of %s",
+            Starlark.type(value));
       }
     }
     if (!stringArgs.isEmpty()) {
@@ -544,12 +539,6 @@ public class StarlarkActionFactory implements StarlarkActionFactoryApi {
     builder.addOutputs(outputArtifacts);
 
     if (unusedInputsList != Starlark.NONE) {
-      if (!starlarkSemantics.experimentalStarlarkUnusedInputsList()) {
-        throw Starlark.errorf(
-            "'unused_inputs_list' attribute is experimental and disabled by default. "
-                + "This API is in development and subject to change at any time. "
-                + "Use --experimental_starlark_unused_inputs_list to use this experimental API.");
-      }
       if (unusedInputsList instanceof Artifact) {
         builder.setUnusedInputsList(Optional.of((Artifact) unusedInputsList));
       } else {
@@ -577,12 +566,10 @@ public class StarlarkActionFactory implements StarlarkActionFactoryApi {
         } else if (toolUnchecked instanceof FilesToRunProvider) {
           builder.addTool((FilesToRunProvider) toolUnchecked);
         } else {
-          throw new EvalException(
-              null,
-              "expected value of type 'File or FilesToRunProvider' for "
-                  + "a member of parameter 'tools' but got "
-                  + Starlark.type(toolUnchecked)
-                  + " instead");
+          throw Starlark.errorf(
+              "expected value of type 'File or FilesToRunProvider' for a member of parameter"
+                  + " 'tools' but got %s instead",
+              Starlark.type(toolUnchecked));
         }
       }
     } else {
@@ -629,7 +616,11 @@ public class StarlarkActionFactory implements StarlarkActionFactoryApi {
     }
 
     String mnemonic = getMnemonic(mnemonicUnchecked);
-    builder.setMnemonic(mnemonic);
+    try {
+      builder.setMnemonic(mnemonic);
+    } catch (IllegalArgumentException e) {
+      throw Starlark.errorf("%s", e.getMessage());
+    }
     if (envUnchecked != Starlark.NONE) {
       builder.setEnvironment(
           ImmutableMap.copyOf(Dict.cast(envUnchecked, String.class, String.class, "env")));

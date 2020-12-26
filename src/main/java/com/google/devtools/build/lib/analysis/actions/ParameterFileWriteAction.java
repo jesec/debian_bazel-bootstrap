@@ -41,10 +41,12 @@ import com.google.devtools.build.lib.server.FailureDetails.Spawn.Code;
 import com.google.devtools.build.lib.skyframe.serialization.autocodec.AutoCodec;
 import com.google.devtools.build.lib.skyframe.serialization.autocodec.AutoCodec.VisibleForSerialization;
 import com.google.devtools.build.lib.syntax.EvalException;
+import com.google.devtools.build.lib.syntax.Starlark;
 import com.google.devtools.build.lib.util.Fingerprint;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
+import javax.annotation.Nullable;
 
 /** Action to write a parameter file for a {@link CommandLine}. */
 @Immutable // if commandLine is immutable
@@ -130,7 +132,7 @@ public final class ParameterFileWriteAction extends AbstractFileWriteAction {
     try {
       return getStringContents();
     } catch (CommandLineExpansionException e) {
-      throw new EvalException("Error expanding command line: " + e.getMessage());
+      throw Starlark.errorf("Error expanding command line: %s", e.getMessage());
     }
   }
 
@@ -173,11 +175,14 @@ public final class ParameterFileWriteAction extends AbstractFileWriteAction {
   }
 
   @Override
-  protected void computeKey(ActionKeyContext actionKeyContext, Fingerprint fp)
+  protected void computeKey(
+      ActionKeyContext actionKeyContext,
+      @Nullable ArtifactExpander artifactExpander,
+      Fingerprint fp)
       throws CommandLineExpansionException {
     fp.addString(GUID);
     fp.addString(String.valueOf(makeExecutable));
     fp.addString(type.toString());
-    commandLine.addToFingerprint(actionKeyContext, fp);
+    commandLine.addToFingerprint(actionKeyContext, artifactExpander, fp);
   }
 }
