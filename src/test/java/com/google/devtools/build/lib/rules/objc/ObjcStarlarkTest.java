@@ -102,7 +102,7 @@ public class ObjcStarlarkTest extends ObjcRuleTestCase {
         "   dep = ctx.attr.deps[0]",
         "   return MyInfo(",
         "      found_libs = dep.objc.library,",
-        "      found_hdrs = dep.objc.header,",
+        "      found_hdrs = dep[CcInfo].compilation_context.headers,",
         "    )",
         "my_rule = rule(implementation = my_rule_impl,",
         "   attrs = {",
@@ -178,7 +178,7 @@ public class ObjcStarlarkTest extends ObjcRuleTestCase {
         "examples/rule/apple_rules.bzl",
         "def my_rule_impl(ctx):",
         "   dep = ctx.attr.deps[0]",
-        "   objc_provider = dep.objc",
+        "   objc_provider = dep.objc", // this is line 3
         "   return []",
         "my_rule = rule(implementation = my_rule_impl,",
         "   attrs = {",
@@ -204,11 +204,12 @@ public class ObjcStarlarkTest extends ObjcRuleTestCase {
     assertThat(e)
         .hasMessageThat()
         .contains("File \"/workspace/examples/apple_starlark/BUILD\", line 3");
-      assertThat(e).hasMessageThat().contains("my_rule(name = 'my_target')");
-      assertThat(e)
-          .hasMessageThat()
-          .contains("File \"/workspace/examples/rule/apple_rules.bzl\", line 3, in my_rule_impl");
-      assertThat(e).hasMessageThat().contains("dep.objc");
+    assertThat(e).hasMessageThat().contains("my_rule(name = 'my_target')"); // (fake source)
+    assertThat(e)
+        .hasMessageThat()
+        .contains(
+            "File \"/workspace/examples/rule/apple_rules.bzl\", line 3, column 23, in"
+                + " my_rule_impl");
     assertThat(e)
         .hasMessageThat()
         .contains(
@@ -295,6 +296,7 @@ public class ObjcStarlarkTest extends ObjcRuleTestCase {
         ")");
 
     useConfiguration("--incompatible_objc_compile_info_migration=false");
+    setStarlarkSemanticsOptions("--incompatible_objc_provider_remove_compile_info=false");
     ConfiguredTarget libRootTarget = getConfiguredTarget("//examples/apple_starlark:lib_root");
     ObjcProvider libRootObjcProvider = libRootTarget.get(ObjcProvider.STARLARK_CONSTRUCTOR);
     assertThat(libRootObjcProvider.define().toList()).contains("mock_define");
@@ -383,6 +385,7 @@ public class ObjcStarlarkTest extends ObjcRuleTestCase {
         ")");
 
     useConfiguration("--incompatible_objc_compile_info_migration=false");
+    setStarlarkSemanticsOptions("--incompatible_objc_provider_remove_compile_info=false");
     ConfiguredTarget libTarget = getConfiguredTarget("//examples/apple_starlark:lib");
     ObjcProvider libObjcProvider = libTarget.get(ObjcProvider.STARLARK_CONSTRUCTOR);
     assertThat(libObjcProvider.define().toList()).contains("mock_define");
@@ -986,7 +989,7 @@ public class ObjcStarlarkTest extends ObjcRuleTestCase {
         "objc_library(",
         "   name = 'lib',",
         "   srcs = ['a.m'],",
-        "   defines = ['define_from_dep']",
+        "   sdk_frameworks = ['framework_from_dep']",
         ")");
 
     return getConfiguredTarget("//examples/objc_starlark:my_target");
@@ -1293,6 +1296,7 @@ public class ObjcStarlarkTest extends ObjcRuleTestCase {
   @Test
   public void testStarlarkCanCreateObjcProviderWithStrictDepsPreMigration() throws Exception {
     useConfiguration("--incompatible_objc_compile_info_migration=false");
+    setStarlarkSemanticsOptions("--incompatible_objc_provider_remove_compile_info=false");
     ConfiguredTarget starlarkTarget =
         createObjcProviderStarlarkTarget(
             "   strict_includes = depset(['path1'])",
@@ -1435,15 +1439,15 @@ public class ObjcStarlarkTest extends ObjcRuleTestCase {
     ConfiguredTarget starlarkTarget =
         createObjcProviderStarlarkTarget(
             "   dep = ctx.attr.deps[0]",
-            "   define = depset(['define_from_impl'])",
+            "   frameworks = depset(['framework_from_impl'])",
             "   created_provider = apple_common.new_objc_provider\\",
-            "(providers=[dep.objc], define=define)",
+            "(providers=[dep.objc], sdk_framework=frameworks)",
             "   return [created_provider]");
 
-    Iterable<String> foundStrings =
-        starlarkTarget.get(ObjcProvider.STARLARK_CONSTRUCTOR).define().toList();
+    Depset foundFrameworks = starlarkTarget.get(ObjcProvider.STARLARK_CONSTRUCTOR).sdkFramework();
 
-    assertThat(foundStrings).containsExactly("define_from_dep", "define_from_impl");
+    assertThat(foundFrameworks.toList())
+        .containsExactly("framework_from_dep", "framework_from_impl");
   }
 
   @Test

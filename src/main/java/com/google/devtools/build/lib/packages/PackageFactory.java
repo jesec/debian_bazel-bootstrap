@@ -19,6 +19,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.Sets;
 import com.google.devtools.build.lib.cmdline.Label;
 import com.google.devtools.build.lib.cmdline.LabelConstants;
 import com.google.devtools.build.lib.cmdline.LabelValidator;
@@ -31,6 +32,7 @@ import com.google.devtools.build.lib.events.ExtendedEventHandler;
 import com.google.devtools.build.lib.events.ExtendedEventHandler.Postable;
 import com.google.devtools.build.lib.events.StoredEventHandler;
 import com.google.devtools.build.lib.packages.Globber.BadGlobException;
+import com.google.devtools.build.lib.packages.Package.Builder.PackageSettings;
 import com.google.devtools.build.lib.packages.PackageValidator.InvalidPackageException;
 import com.google.devtools.build.lib.packages.RuleClass.Builder.RuleClassType;
 import com.google.devtools.build.lib.packages.RuleFactory.BuildLangTypedAttributeValuesMap;
@@ -128,7 +130,7 @@ public final class PackageFactory {
   private final ImmutableMap<String, Object> nativeModuleBindingsForBuild;
   private final ImmutableMap<String, Object> nativeModuleBindingsForWorkspace;
 
-  private final Package.Builder.Helper packageBuilderHelper;
+  private final PackageSettings packageSettings;
   private final PackageValidator packageValidator;
   private final PackageLoadingListener packageLoadingListener;
 
@@ -160,8 +162,8 @@ public final class PackageFactory {
   }
 
   @VisibleForTesting
-  public Package.Builder.Helper getPackageBuilderHelperForTesting() {
-    return packageBuilderHelper;
+  public PackageSettings getPackageSettingsForTesting() {
+    return packageSettings;
   }
 
   /**
@@ -178,15 +180,16 @@ public final class PackageFactory {
   // so WorkspaceFactory can add an extra top-level builtin.
   public PackageFactory(
       RuleClassProvider ruleClassProvider,
+      ForkJoinPool executorForGlobbing,
       Iterable<EnvironmentExtension> environmentExtensions,
       String version,
-      Package.Builder.Helper packageBuilderHelper,
+      PackageSettings packageSettings,
       PackageValidator packageValidator,
       PackageLoadingListener packageLoadingListener) {
     this.ruleFactory = new RuleFactory(ruleClassProvider);
     this.ruleFunctions = buildRuleFunctions(ruleFactory);
     this.ruleClassProvider = ruleClassProvider;
-    setGlobbingThreads(100);
+    this.executor = executorForGlobbing;
     this.environmentExtensions = ImmutableList.copyOf(environmentExtensions);
     this.packageArguments = createPackageArguments();
     this.nativeModuleBindingsForBuild =
@@ -194,7 +197,7 @@ public final class PackageFactory {
             ruleFunctions, packageArguments, this.environmentExtensions);
     this.nativeModuleBindingsForWorkspace =
         createNativeModuleBindingsForWorkspace(ruleClassProvider, version);
-    this.packageBuilderHelper = packageBuilderHelper;
+    this.packageSettings = packageSettings;
     this.packageValidator = packageValidator;
     this.packageLoadingListener = packageLoadingListener;
   }
@@ -204,11 +207,33 @@ public final class PackageFactory {
     this.syscalls = Preconditions.checkNotNull(syscalls);
   }
 
-  /** Sets the max number of threads to use for globbing. */
+  /**
+   * Sets the max number of threads to use for globbing.
+   *
+   * <p>Internally there is a {@link ForkJoinPool} used for globbing. If the specified {@code
+   * globbingThreads} does not match the previous value (initial value is 100), then we {@link
+   * ForkJoinPool#shutdown()} the old {@link ForkJoinPool} instance and make a new one.
+   */
   public void setGlobbingThreads(int globbingThreads) {
-    if (executor == null || executor.getParallelism() != globbingThreads) {
-      executor = NamedForkJoinPool.newNamedPool("globbing pool", globbingThreads);
+    if (executor == null) {
+      executor = makeForkJoinPool(globbingThreads);
+      return;
     }
+    if (executor.getParallelism() == globbingThreads) {
+      return;
+    }
+    // We don't use ForkJoinPool#shutdownNow since it has a performance bug. See
+    // http://b/33482341#comment13.
+    executor.shutdown();
+    executor = makeForkJoinPool(globbingThreads);
+  }
+
+  public static ForkJoinPool makeDefaultSizedForkJoinPoolForGlobbing() {
+    return makeForkJoinPool(/*globbingThreads=*/ 100);
+  }
+
+  private static ForkJoinPool makeForkJoinPool(int globbingThreads) {
+    return NamedForkJoinPool.newNamedPool("globbing pool", globbingThreads);
   }
 
   /**
@@ -312,27 +337,26 @@ public final class PackageFactory {
       public Object call(StarlarkThread thread, Tuple<Object> args, Dict<String, Object> kwargs)
           throws EvalException {
         if (!args.isEmpty()) {
-          throw new EvalException(null, "unexpected positional arguments");
+          throw new EvalException("unexpected positional arguments");
         }
         Package.Builder pkgBuilder = getContext(thread).pkgBuilder;
 
         // Validate parameter list
         if (pkgBuilder.isPackageFunctionUsed()) {
-          throw new EvalException(null, "'package' can only be used once per BUILD file");
+          throw new EvalException("'package' can only be used once per BUILD file");
         }
         pkgBuilder.setPackageFunctionUsed();
 
         // Each supplied argument must name a PackageArgument.
         if (kwargs.isEmpty()) {
-          throw new EvalException(
-              null, "at least one argument must be given to the 'package' function");
+          throw new EvalException("at least one argument must be given to the 'package' function");
         }
         Location loc = thread.getCallerLocation();
         for (Map.Entry<String, Object> kwarg : kwargs.entrySet()) {
           String name = kwarg.getKey();
           PackageArgument<?> pkgarg = packageArguments.get(name);
           if (pkgarg == null) {
-            throw new EvalException(null, "unexpected keyword argument: " + name);
+            throw Starlark.errorf("unexpected keyword argument: %s", name);
           }
           pkgarg.convertAndProcess(pkgBuilder, loc, kwarg.getValue());
         }
@@ -392,7 +416,7 @@ public final class PackageFactory {
             thread.getSemantics(),
             thread.getCallStack());
       } catch (RuleFactory.InvalidRuleException | Package.NameConflictException e) {
-        throw new EvalException(null, e.getMessage());
+        throw new EvalException(e);
       }
       return Starlark.NONE;
     }
@@ -430,8 +454,7 @@ public final class PackageFactory {
       PackageIdentifier packageId,
       RootedPath buildFile,
       StarlarkFile file,
-      Map<String, Module> loadedModules,
-      ImmutableList<Label> starlarkFileDependencies,
+      ImmutableMap<String, Module> loadedModules,
       RuleVisibility defaultVisibility,
       StarlarkSemantics starlarkSemantics,
       Globber globber)
@@ -448,7 +471,6 @@ public final class PackageFactory {
           defaultVisibility,
           starlarkSemantics,
           loadedModules,
-          starlarkFileDependencies,
           repositoryMapping);
     } catch (InterruptedException e) {
       globber.onInterrupt();
@@ -462,14 +484,14 @@ public final class PackageFactory {
   public Package.Builder newExternalPackageBuilder(
       RootedPath workspacePath, String runfilesPrefix, StarlarkSemantics starlarkSemantics) {
     return Package.newExternalPackageBuilder(
-        packageBuilderHelper, workspacePath, runfilesPrefix, starlarkSemantics);
+        packageSettings, workspacePath, runfilesPrefix, starlarkSemantics);
   }
 
   @VisibleForTesting
   public Package.Builder newPackageBuilder(
       PackageIdentifier packageId, String runfilesPrefix, StarlarkSemantics starlarkSemantics) {
     return new Package.Builder(
-        packageBuilderHelper,
+        packageSettings,
         packageId,
         runfilesPrefix,
         starlarkSemantics.incompatibleNoImplicitFileExport(),
@@ -533,23 +555,24 @@ public final class PackageFactory {
             .restrictStringEscapes(semantics.incompatibleRestrictStringEscapes())
             .build();
     StarlarkFile file = StarlarkFile.parse(input, options);
-    Package result =
+    Package.Builder packageBuilder =
         createPackageFromAst(
-                externalPkg.getWorkspaceName(),
-                /*repositoryMapping=*/ ImmutableMap.of(),
-                packageId,
-                buildFile,
-                file,
-                /*loadedModules=*/ ImmutableMap.<String, Module>of(),
-                /*starlarkFileDependencies=*/ ImmutableList.<Label>of(),
-                /*defaultVisibility=*/ ConstantRuleVisibility.PUBLIC,
-                semantics,
-                globber)
-            .build();
-    for (Postable post : result.getPosts()) {
+            externalPkg.getWorkspaceName(),
+            /*repositoryMapping=*/ ImmutableMap.of(),
+            packageId,
+            buildFile,
+            file,
+            /*loadedModules=*/ ImmutableMap.<String, Module>of(),
+            /*defaultVisibility=*/ ConstantRuleVisibility.PUBLIC,
+            semantics,
+            globber);
+    Package result = packageBuilder.build();
+
+    for (Postable post : packageBuilder.getPosts()) {
       eventHandler.post(post);
     }
-    Event.replayEventsOn(eventHandler, result.getEvents());
+    Event.replayEventsOn(eventHandler, packageBuilder.getEvents());
+
     return result;
   }
 
@@ -717,13 +740,12 @@ public final class PackageFactory {
       Globber globber,
       RuleVisibility defaultVisibility,
       StarlarkSemantics semantics,
-      Map<String, Module> loadedModules,
-      ImmutableList<Label> starlarkFileDependencies,
+      ImmutableMap<String, Module> loadedModules,
       ImmutableMap<RepositoryName, RepositoryName> repositoryMapping)
       throws InterruptedException {
     Package.Builder pkgBuilder =
         new Package.Builder(
-                packageBuilderHelper,
+                packageSettings,
                 packageId,
                 ruleClassProvider.getRunfilesPrefix(),
                 semantics.incompatibleNoImplicitFileExport(),
@@ -734,10 +756,16 @@ public final class PackageFactory {
             // Let's give the BUILD file a chance to set default_visibility once,
             // by resetting the PackageBuilder.defaultVisibilitySet flag.
             .setDefaultVisibilitySet(false)
-            .setStarlarkFileDependencies(starlarkFileDependencies)
+            // TODO(adonovan): opt: don't precompute this value, which is rarely needed
+            // and can be derived from Package.loads (if available) on demand.
+            .setStarlarkFileDependencies(transitiveClosureOfLabels(loadedModules))
             .setWorkspaceName(workspaceName)
             .setThirdPartyLicenceExistencePolicy(
                 ruleClassProvider.getThirdPartyLicenseExistencePolicy());
+    if (packageSettings.recordLoadedModules()) {
+      pkgBuilder.setLoads(loadedModules);
+    }
+
     StoredEventHandler eventHandler = new StoredEventHandler();
     if (!buildPackage(
         pkgBuilder,
@@ -753,6 +781,23 @@ public final class PackageFactory {
     return pkgBuilder;
   }
 
+  private static ImmutableList<Label> transitiveClosureOfLabels(
+      ImmutableMap<String, Module> loads) {
+    Set<Label> set = Sets.newLinkedHashSet();
+    transitiveClosureOfLabelsRec(set, loads);
+    return ImmutableList.copyOf(set);
+  }
+
+  private static void transitiveClosureOfLabelsRec(
+      Set<Label> set, ImmutableMap<String, Module> loads) {
+    for (Module m : loads.values()) {
+      BazelModuleContext ctx = BazelModuleContext.of(m);
+      if (set.add(ctx.label())) {
+        transitiveClosureOfLabelsRec(set, ctx.loads());
+      }
+    }
+  }
+
   // Validates and executes a parsed BUILD file, returning true on success,
   // or reporting errors to pkgContext.eventHandler on failure.
   private boolean buildPackage(
@@ -760,7 +805,7 @@ public final class PackageFactory {
       PackageIdentifier packageId,
       StarlarkFile file,
       StarlarkSemantics semantics,
-      Map<String, Module> loadedModules,
+      ImmutableMap<String, Module> loadedModules,
       PackageContext pkgContext)
       throws InterruptedException {
 
@@ -847,7 +892,7 @@ public final class PackageFactory {
       try {
         EvalUtils.exec(file, module, thread);
       } catch (EvalException ex) {
-        pkgContext.eventHandler.handle(Event.error(ex.getLocation(), ex.getMessage()));
+        pkgContext.eventHandler.handle(Event.error(null, ex.getMessageWithStack()));
         return false;
       }
 

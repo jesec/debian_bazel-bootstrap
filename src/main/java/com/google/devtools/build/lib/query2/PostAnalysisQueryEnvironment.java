@@ -53,6 +53,7 @@ import com.google.devtools.build.lib.query2.engine.QueryUtil.UniquifierImpl;
 import com.google.devtools.build.lib.query2.engine.ThreadSafeOutputFormatterCallback;
 import com.google.devtools.build.lib.query2.engine.Uniquifier;
 import com.google.devtools.build.lib.rules.AliasConfiguredTarget;
+import com.google.devtools.build.lib.server.FailureDetails.ConfigurableQuery;
 import com.google.devtools.build.lib.skyframe.ConfiguredTargetKey;
 import com.google.devtools.build.lib.skyframe.ConfiguredTargetValue;
 import com.google.devtools.build.lib.skyframe.GraphBackedRecursivePackageProvider;
@@ -65,6 +66,7 @@ import com.google.devtools.build.lib.skyframe.SkyframeExecutor;
 import com.google.devtools.build.lib.skyframe.TargetPatternValue;
 import com.google.devtools.build.lib.skyframe.TargetPatternValue.TargetPatternKey;
 import com.google.devtools.build.lib.vfs.PathFragment;
+import com.google.devtools.build.skyframe.SkyFunctionName;
 import com.google.devtools.build.skyframe.SkyKey;
 import com.google.devtools.build.skyframe.WalkableGraph;
 import java.io.IOException;
@@ -88,7 +90,8 @@ import javax.annotation.Nullable;
  * {@link TargetAccessor} field should be initialized on a per-query basis not a per-environment
  * basis.
  *
- * <p>Aspects are also not supported, but probably should be in some fashion.
+ * <p>Aspects are followed if {@link
+ * com.google.devtools.build.lib.query2.common.CommonQueryOptions#useAspects} is on.
  */
 public abstract class PostAnalysisQueryEnvironment<T> extends AbstractBlazeQueryEnvironment<T> {
   protected final TopLevelConfigurations topLevelConfigurations;
@@ -169,7 +172,8 @@ public abstract class PostAnalysisQueryEnvironment<T> extends AbstractBlazeQuery
       throw new QueryException(
           String.format(
               "The following filter(s) are not currently supported by configured query: %s",
-              settings.toString()));
+              settings),
+          ConfigurableQuery.Code.FILTERS_NOT_SUPPORTED);
     }
   }
 
@@ -186,7 +190,7 @@ public abstract class PostAnalysisQueryEnvironment<T> extends AbstractBlazeQuery
           .getPackage()
           .getTarget(label.getName());
     } catch (NoSuchTargetException e) {
-      throw new TargetNotFoundException(e);
+      throw new TargetNotFoundException(e, e.getDetailedExitCode());
     }
   }
 
@@ -391,12 +395,19 @@ public abstract class PostAnalysisQueryEnvironment<T> extends AbstractBlazeQuery
                         .setConfiguration(getConfiguration(dependency))
                         .build());
         values.add(new ClassifiedDependency<>(dependency, implicit));
-      } else if (key.functionName().equals(SkyFunctions.TOOLCHAIN_RESOLUTION)) {
+      } else if (shouldFollowSkyKey(key)) {
         // Also fetch these dependencies.
         values.addAll(targetifyValues(null, graph.getDirectDeps(key)));
       }
     }
     return values.build();
+  }
+
+  private boolean shouldFollowSkyKey(SkyKey key) {
+    SkyFunctionName skyFunction = key.functionName();
+    return skyFunction.equals(SkyFunctions.CONFIGURED_TARGET)
+        || skyFunction.equals(SkyFunctions.TOOLCHAIN_RESOLUTION)
+        || (settings.contains(Setting.INCLUDE_ASPECTS) && skyFunction.equals(SkyFunctions.ASPECT));
   }
 
   private Map<SkyKey, ImmutableList<ClassifiedDependency<T>>> targetifyValues(
@@ -486,12 +497,16 @@ public abstract class PostAnalysisQueryEnvironment<T> extends AbstractBlazeQuery
       boolean loads,
       QueryExpressionContext<T> context)
       throws QueryException {
-    throw new QueryException("buildfiles() doesn't make sense for the configured target graph");
+    throw new QueryException(
+        "buildfiles() doesn't make sense for the configured target graph",
+        ConfigurableQuery.Code.BUILDFILES_FUNCTION_NOT_SUPPORTED);
   }
 
   @Override
   public Collection<T> getSiblingTargetsInPackage(T target) throws QueryException {
-    throw new QueryException("siblings() not supported for post analysis queries");
+    throw new QueryException(
+        "siblings() not supported for post analysis queries",
+        ConfigurableQuery.Code.SIBLINGS_FUNCTION_NOT_SUPPORTED);
   }
 
   @Override

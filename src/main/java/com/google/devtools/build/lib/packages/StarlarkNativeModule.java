@@ -29,7 +29,7 @@ import com.google.devtools.build.lib.packages.Globber.BadGlobException;
 import com.google.devtools.build.lib.packages.PackageFactory.PackageContext;
 import com.google.devtools.build.lib.packages.RuleClass.Builder.ThirdPartyLicenseExistencePolicy;
 import com.google.devtools.build.lib.packages.Type.ConversionException;
-import com.google.devtools.build.lib.skylarkbuildapi.StarlarkNativeModuleApi;
+import com.google.devtools.build.lib.starlarkbuildapi.StarlarkNativeModuleApi;
 import com.google.devtools.build.lib.syntax.Dict;
 import com.google.devtools.build.lib.syntax.EvalException;
 import com.google.devtools.build.lib.syntax.EvalUtils;
@@ -113,7 +113,7 @@ public class StarlarkNativeModule implements StarlarkNativeModuleApi {
       context.pkgBuilder.setIOExceptionAndMessage(e, errorMessage);
       matches = ImmutableList.of();
     } catch (BadGlobException e) {
-      throw new EvalException(null, e.getMessage());
+      throw new EvalException(e);
     }
 
     ArrayList<String> result = new ArrayList<>(matches.size());
@@ -185,7 +185,7 @@ public class StarlarkNativeModule implements StarlarkNativeModuleApi {
     } catch (LabelSyntaxException e) {
       throw Starlark.errorf("package group has invalid name: %s: %s", name, e.getMessage());
     } catch (Package.NameConflictException e) {
-      throw new EvalException(null, e.getMessage());
+      throw new EvalException(e);
     }
   }
 
@@ -424,7 +424,7 @@ public class StarlarkNativeModule implements StarlarkNativeModuleApi {
 
   private static class NotRepresentableException extends EvalException {
     NotRepresentableException(String msg) {
-      super(null, msg);
+      super(msg);
     }
   }
 }

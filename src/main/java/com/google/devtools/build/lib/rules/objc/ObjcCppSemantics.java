@@ -18,6 +18,7 @@ import static com.google.devtools.build.lib.rules.objc.CompilationSupport.Includ
 
 import com.google.common.collect.ImmutableSet;
 import com.google.devtools.build.lib.analysis.RuleContext;
+import com.google.devtools.build.lib.analysis.RuleErrorConsumer;
 import com.google.devtools.build.lib.analysis.TransitiveInfoCollection;
 import com.google.devtools.build.lib.analysis.config.BuildConfiguration;
 import com.google.devtools.build.lib.packages.AspectDescriptor;
@@ -75,7 +76,8 @@ public class ObjcCppSemantics implements CppSemantics {
   public void finalizeCompileActionBuilder(
       BuildConfiguration configuration,
       FeatureConfiguration featureConfiguration,
-      CppCompileActionBuilder actionBuilder) {
+      CppCompileActionBuilder actionBuilder,
+      RuleErrorConsumer ruleErrorConsumer) {
     actionBuilder
         // Without include scanning, we need the entire crosstool filegroup, including header files,
         // as opposed to just the "compile" filegroup.  Even with include scanning, we need the
@@ -91,7 +93,8 @@ public class ObjcCppSemantics implements CppSemantics {
   }
 
   @Override
-  public HeadersCheckingMode determineStarlarkHeadersCheckingMode(CppConfiguration cppConfig) {
+  public HeadersCheckingMode determineStarlarkHeadersCheckingMode(
+      RuleContext context, CppConfiguration cppConfig, CcToolchainProvider toolchain) {
     if (cppConfig.strictHeaderCheckingFromStarlark()) {
       return HeadersCheckingMode.STRICT;
     }

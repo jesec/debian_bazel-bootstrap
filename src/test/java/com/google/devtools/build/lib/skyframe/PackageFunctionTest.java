@@ -21,19 +21,20 @@ import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
 
-import com.google.common.base.Optional;
 import com.google.common.base.Predicates;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.devtools.build.lib.actions.FileStateValue;
+import com.google.devtools.build.lib.analysis.ConfiguredRuleClassProvider;
 import com.google.devtools.build.lib.analysis.util.BuildViewTestCase;
 import com.google.devtools.build.lib.clock.BlazeClock;
 import com.google.devtools.build.lib.cmdline.Label;
 import com.google.devtools.build.lib.cmdline.PackageIdentifier;
 import com.google.devtools.build.lib.events.Event;
 import com.google.devtools.build.lib.events.ExtendedEventHandler;
+import com.google.devtools.build.lib.packages.BazelModuleContext;
 import com.google.devtools.build.lib.packages.BuildFileNotFoundException;
 import com.google.devtools.build.lib.packages.ConstantRuleVisibility;
 import com.google.devtools.build.lib.packages.NoSuchPackageException;
@@ -47,8 +48,9 @@ import com.google.devtools.build.lib.pkgcache.PathPackageLocator;
 import com.google.devtools.build.lib.rules.repository.RepositoryDelegatorFunction;
 import com.google.devtools.build.lib.server.FailureDetails.PackageLoading;
 import com.google.devtools.build.lib.skyframe.util.SkyframeExecutorTestUtils;
+import com.google.devtools.build.lib.syntax.Module;
 import com.google.devtools.build.lib.testutil.ManualClock;
-import com.google.devtools.build.lib.testutil.MoreAsserts;
+import com.google.devtools.build.lib.testutil.TestRuleClassProvider;
 import com.google.devtools.build.lib.util.DetailedExitCode;
 import com.google.devtools.build.lib.util.ExitCode;
 import com.google.devtools.build.lib.util.Pair;
@@ -77,6 +79,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -151,8 +154,7 @@ public class PackageFunctionTest extends BuildViewTestCase {
     skyframeExecutor.injectExtraPrecomputedValues(
         ImmutableList.of(
             PrecomputedValue.injected(
-                RepositoryDelegatorFunction.RESOLVED_FILE_INSTEAD_OF_WORKSPACE,
-                Optional.<RootedPath>absent())));
+                RepositoryDelegatorFunction.RESOLVED_FILE_INSTEAD_OF_WORKSPACE, Optional.empty())));
     EvaluationResult<PackageValue> result =
         SkyframeExecutorTestUtils.evaluate(
             skyframeExecutor, skyKey, /*keepGoing=*/ false, reporter);
@@ -947,11 +949,9 @@ public class PackageFunctionTest extends BuildViewTestCase {
     invalidatePackages();
 
     SkyKey skyKey = PackageValue.key(PackageIdentifier.parse("@//pkg"));
-    Package pkg = validPackage(skyKey);
+    validPackage(skyKey);
 
-    String expectedEventString = "expected boolean for argument `allow_empty`, got `5`";
-    MoreAsserts.assertContainsEvent(pkg.getEvents(), expectedEventString);
-    assertContainsEvent(expectedEventString);
+    assertContainsEvent("expected boolean for argument `allow_empty`, got `5`");
   }
 
   @Test
@@ -962,7 +962,7 @@ public class PackageFunctionTest extends BuildViewTestCase {
     SkyKey skyKey = PackageValue.key(PackageIdentifier.parse("@//pkg"));
     Package pkg = validPackage(skyKey);
     assertThat(pkg.containsErrors()).isFalse();
-    assertThat(pkg.getEvents()).isEmpty();
+    assertNoEvents();
   }
 
   @Test
@@ -978,7 +978,7 @@ public class PackageFunctionTest extends BuildViewTestCase {
     SkyKey skyKey = PackageValue.key(PackageIdentifier.parse("@//pkg"));
     Package pkg = validPackage(skyKey);
     assertThat(pkg.containsErrors()).isFalse();
-    assertThat(pkg.getEvents()).isEmpty();
+    assertNoEvents();
   }
 
   @Test
@@ -991,7 +991,7 @@ public class PackageFunctionTest extends BuildViewTestCase {
 
     Package pkg = validPackage(skyKey);
     assertThat(pkg.containsErrors()).isFalse();
-    assertThat(pkg.getEvents()).isEmpty();
+    assertNoEvents();
 
     scratch.deleteFile("pkg/blah.foo");
     getSkyframeExecutor()
@@ -1003,10 +1003,9 @@ public class PackageFunctionTest extends BuildViewTestCase {
     reporter.removeHandler(failFastHandler);
     pkg = validPackage(skyKey);
     assertThat(pkg.containsErrors()).isTrue();
-    String expectedEventString =
-        "glob pattern '*.foo' didn't match anything, but allow_empty is set to False";
-    MoreAsserts.assertContainsEvent(pkg.getEvents(), expectedEventString);
-    assertContainsEvent(expectedEventString);
+    assertContainsEvent(
+        "glob pattern '*.foo' didn't match anything, but allow_empty is set to False (the "
+            + "default value of allow_empty can be set with --incompatible_disallow_empty_glob).");
   }
 
   @Test
@@ -1024,7 +1023,7 @@ public class PackageFunctionTest extends BuildViewTestCase {
 
     Package pkg = validPackage(skyKey);
     assertThat(pkg.containsErrors()).isFalse();
-    assertThat(pkg.getEvents()).isEmpty();
+    assertNoEvents();
 
     scratch.deleteFile("pkg/blah.foo");
     getSkyframeExecutor()
@@ -1036,10 +1035,9 @@ public class PackageFunctionTest extends BuildViewTestCase {
     reporter.removeHandler(failFastHandler);
     pkg = validPackage(skyKey);
     assertThat(pkg.containsErrors()).isTrue();
-    String expectedEventString =
-        "glob pattern '*.foo' didn't match anything, but allow_empty is set to False";
-    MoreAsserts.assertContainsEvent(pkg.getEvents(), expectedEventString);
-    assertContainsEvent(expectedEventString);
+    assertContainsEvent(
+        "glob pattern '*.foo' didn't match anything, but allow_empty is set to False (the "
+            + "default value of allow_empty can be set with --incompatible_disallow_empty_glob).");
   }
 
   @Test
@@ -1053,8 +1051,8 @@ public class PackageFunctionTest extends BuildViewTestCase {
     Package pkg = validPackage(skyKey);
     assertThat(pkg.containsErrors()).isTrue();
     String expectedEventString =
-        "glob pattern '*.foo' didn't match anything, but allow_empty is set to False";
-    MoreAsserts.assertContainsEvent(pkg.getEvents(), expectedEventString);
+        "glob pattern '*.foo' didn't match anything, but allow_empty is set to False (the "
+            + "default value of allow_empty can be set with --incompatible_disallow_empty_glob).";
     assertContainsEvent(expectedEventString);
 
     scratch.overwriteFile("pkg/BUILD", "x = " + "glob(['*.foo'], allow_empty=False) #comment");
@@ -1066,7 +1064,6 @@ public class PackageFunctionTest extends BuildViewTestCase {
 
     pkg = validPackage(skyKey);
     assertThat(pkg.containsErrors()).isTrue();
-    MoreAsserts.assertContainsEvent(pkg.getEvents(), expectedEventString);
     assertContainsEvent(expectedEventString);
   }
 
@@ -1086,8 +1083,8 @@ public class PackageFunctionTest extends BuildViewTestCase {
     Package pkg = validPackage(skyKey);
     assertThat(pkg.containsErrors()).isTrue();
     String expectedEventString =
-        "glob pattern '*.foo' didn't match anything, but allow_empty is set to False";
-    MoreAsserts.assertContainsEvent(pkg.getEvents(), expectedEventString);
+        "glob pattern '*.foo' didn't match anything, but allow_empty is set to False (the "
+            + "default value of allow_empty can be set with --incompatible_disallow_empty_glob).";
     assertContainsEvent(expectedEventString);
 
     scratch.overwriteFile("pkg/BUILD", "x = " + "glob(['*.foo']) #comment");
@@ -1099,7 +1096,6 @@ public class PackageFunctionTest extends BuildViewTestCase {
 
     pkg = validPackage(skyKey);
     assertThat(pkg.containsErrors()).isTrue();
-    MoreAsserts.assertContainsEvent(pkg.getEvents(), expectedEventString);
     assertContainsEvent(expectedEventString);
   }
 
@@ -1116,8 +1112,8 @@ public class PackageFunctionTest extends BuildViewTestCase {
     Package pkg = validPackage(skyKey);
     assertThat(pkg.containsErrors()).isTrue();
     String expectedEventString =
-        "all files in the glob have been excluded, but allow_empty is set to False.";
-    MoreAsserts.assertContainsEvent(pkg.getEvents(), expectedEventString);
+        "all files in the glob have been excluded, but allow_empty is set to False (the "
+            + "default value of allow_empty can be set with --incompatible_disallow_empty_glob).";
     assertContainsEvent(expectedEventString);
 
     scratch.overwriteFile(
@@ -1131,7 +1127,6 @@ public class PackageFunctionTest extends BuildViewTestCase {
 
     pkg = validPackage(skyKey);
     assertThat(pkg.containsErrors()).isTrue();
-    MoreAsserts.assertContainsEvent(pkg.getEvents(), expectedEventString);
     assertContainsEvent(expectedEventString);
   }
 
@@ -1153,8 +1148,8 @@ public class PackageFunctionTest extends BuildViewTestCase {
     Package pkg = validPackage(skyKey);
     assertThat(pkg.containsErrors()).isTrue();
     String expectedEventString =
-        "all files in the glob have been excluded, but allow_empty is set to False.";
-    MoreAsserts.assertContainsEvent(pkg.getEvents(), expectedEventString);
+        "all files in the glob have been excluded, but allow_empty is set to False (the "
+            + "default value of allow_empty can be set with --incompatible_disallow_empty_glob).";
     assertContainsEvent(expectedEventString);
 
     scratch.overwriteFile("pkg/BUILD", "x = glob(include=['*.foo'], exclude=['blah.*']) # comment");
@@ -1166,7 +1161,6 @@ public class PackageFunctionTest extends BuildViewTestCase {
 
     pkg = validPackage(skyKey);
     assertThat(pkg.containsErrors()).isTrue();
-    MoreAsserts.assertContainsEvent(pkg.getEvents(), expectedEventString);
     assertContainsEvent(expectedEventString);
   }
 
@@ -1180,10 +1174,9 @@ public class PackageFunctionTest extends BuildViewTestCase {
     reporter.removeHandler(failFastHandler);
     Package pkg = validPackage(skyKey);
     assertThat(pkg.containsErrors()).isTrue();
-    String expectedEventString =
-        "glob pattern '*.foo' didn't match anything, but allow_empty is set to False";
-    MoreAsserts.assertContainsEvent(pkg.getEvents(), expectedEventString);
-    assertContainsEvent(expectedEventString);
+    assertContainsEvent(
+        "glob pattern '*.foo' didn't match anything, but allow_empty is set to False (the "
+            + "default value of allow_empty can be set with --incompatible_disallow_empty_glob).");
 
     scratch.file("pkg/blah.foo");
     getSkyframeExecutor()
@@ -1193,9 +1186,10 @@ public class PackageFunctionTest extends BuildViewTestCase {
             Root.fromPath(rootDirectory));
 
     reporter.addHandler(failFastHandler);
+    eventCollector.clear();
     pkg = validPackage(skyKey);
     assertThat(pkg.containsErrors()).isFalse();
-    assertThat(pkg.getEvents()).isEmpty();
+    assertNoEvents();
   }
 
   @Test
@@ -1213,10 +1207,10 @@ public class PackageFunctionTest extends BuildViewTestCase {
     reporter.removeHandler(failFastHandler);
     Package pkg = validPackage(skyKey);
     assertThat(pkg.containsErrors()).isTrue();
-    String expectedEventString =
-        "glob pattern '*.foo' didn't match anything, but allow_empty is set to False";
-    MoreAsserts.assertContainsEvent(pkg.getEvents(), expectedEventString);
-    assertContainsEvent(expectedEventString);
+
+    assertContainsEvent(
+        "glob pattern '*.foo' didn't match anything, but allow_empty is set to False (the "
+            + "default value of allow_empty can be set with --incompatible_disallow_empty_glob).");
 
     scratch.file("pkg/blah.foo");
     getSkyframeExecutor()
@@ -1226,9 +1220,45 @@ public class PackageFunctionTest extends BuildViewTestCase {
             Root.fromPath(rootDirectory));
 
     reporter.addHandler(failFastHandler);
+    eventCollector.clear();
     pkg = validPackage(skyKey);
     assertThat(pkg.containsErrors()).isFalse();
-    assertThat(pkg.getEvents()).isEmpty();
+    assertNoEvents();
+  }
+
+  @Test
+  public void testPackageRecordsLoadedModules() throws Exception {
+    scratch.file("p/BUILD", "load('a.bzl', 'a'); load(':b.bzl', 'b')");
+    scratch.file("p/a.bzl", "load('c.bzl', 'c'); a = c");
+    scratch.file("p/b.bzl", "load(':c.bzl', 'c'); b = c");
+    scratch.file("p/c.bzl", "c = 0");
+
+    // load p
+    preparePackageLoading(rootDirectory);
+    SkyKey skyKey = PackageValue.key(PackageIdentifier.parse("@//p"));
+    Package p = validPackageWithoutErrors(skyKey);
+
+    // Keys are load strings as they appear in the source (notice ":" in one of them).
+    Map<String, Module> pLoads = p.getLoads();
+    assertThat(pLoads.keySet().toString()).isEqualTo("[a.bzl, :b.bzl]");
+
+    // subgraph a
+    Module a = pLoads.get("a.bzl");
+    assertThat(a.toString()).isEqualTo("<module //p:a.bzl>");
+    Map<String, Module> aLoads = BazelModuleContext.of(a).loads();
+    assertThat(aLoads.keySet().toString()).isEqualTo("[c.bzl]");
+    Module cViaA = aLoads.get("c.bzl");
+    assertThat(cViaA.toString()).isEqualTo("<module //p:c.bzl>");
+
+    // subgraph b
+    Module b = pLoads.get(":b.bzl");
+    assertThat(b.toString()).isEqualTo("<module //p:b.bzl>");
+    Map<String, Module> bLoads = BazelModuleContext.of(b).loads();
+    assertThat(bLoads.keySet().toString()).isEqualTo("[:c.bzl]");
+    Module cViaB = bLoads.get(":c.bzl");
+    assertThat(cViaB).isSameInstanceAs(cViaA);
+
+    assertThat(cViaA.getGlobal("c")).isEqualTo(0);
   }
 
   @Test
@@ -1334,6 +1364,199 @@ public class PackageFunctionTest extends BuildViewTestCase {
     assertThat(detailedExitCode.getExitCode()).isEqualTo(ExitCode.BUILD_FAILURE);
     assertThat(detailedExitCode.getFailureDetail().getPackageLoading().getCode())
         .isEqualTo(expectedPackageLoadingCode);
+  }
+
+  /**
+   * Tests of the prelude file functionality.
+   *
+   * <p>This is in a separate BuildViewTestCase because we override the prelude label for the test.
+   * (The prelude label is configured differently between Bazel and Blaze.)
+   */
+  @RunWith(JUnit4.class)
+  public static class PreludeTest extends BuildViewTestCase {
+
+    private final CustomInMemoryFs fs = new CustomInMemoryFs(new ManualClock());
+
+    @Override
+    protected FileSystem createFileSystem() {
+      return fs;
+    }
+
+    @Override
+    protected ConfiguredRuleClassProvider createRuleClassProvider() {
+      ConfiguredRuleClassProvider.Builder builder = new ConfiguredRuleClassProvider.Builder();
+      // addStandardRules() may call setPrelude(), so do it first.
+      TestRuleClassProvider.addStandardRules(builder);
+      builder.setPrelude("//tools/build_rules:test_prelude");
+      return builder.build();
+    }
+
+    @Test
+    public void testPreludeDefinedSymbolIsUsable() throws Exception {
+      scratch.file("tools/build_rules/BUILD");
+      scratch.file(
+          "tools/build_rules/test_prelude", //
+          "foo = 'FOO'");
+      scratch.file(
+          "pkg/BUILD", //
+          "print(foo)");
+
+      getConfiguredTarget("//pkg:BUILD");
+      assertContainsEvent("FOO");
+    }
+
+    @Test
+    public void testPreludeAutomaticallyReexportsLoadedSymbols() throws Exception {
+      scratch.file("tools/build_rules/BUILD");
+      scratch.file(
+          "tools/build_rules/test_prelude", //
+          "load('//util:common.bzl', 'foo')");
+      scratch.file("util/BUILD");
+      scratch.file(
+          "util/common.bzl", //
+          "foo = 'FOO'");
+      scratch.file(
+          "pkg/BUILD", //
+          "print(foo)");
+
+      getConfiguredTarget("//pkg:BUILD");
+      assertContainsEvent("FOO");
+    }
+
+    // TODO(brandjon): Invert this test once the prelude is a module instead of a syntactic
+    // mutation on BUILD files.
+    @Test
+    public void testPreludeCanExportUnderscoreSymbols() throws Exception {
+      scratch.file("tools/build_rules/BUILD");
+      scratch.file(
+          "tools/build_rules/test_prelude", //
+          "_foo = 'FOO'");
+      scratch.file(
+          "pkg/BUILD", //
+          "print(_foo)");
+
+      getConfiguredTarget("//pkg:BUILD");
+      assertContainsEvent("FOO");
+    }
+
+    @Test
+    public void testPreludeCanShadowPredeclareds() throws Exception {
+      scratch.file("tools/build_rules/BUILD");
+      scratch.file(
+          "tools/build_rules/test_prelude", //
+          "cc_library = 'FOO'");
+      scratch.file(
+          "pkg/BUILD", //
+          "print(cc_library)");
+
+      getConfiguredTarget("//pkg:BUILD");
+      assertContainsEvent("FOO");
+    }
+
+    // TODO(brandjon): Invert this test once the prelude is a module instead of a syntactic
+    // mutation on BUILD files.
+    @Test
+    public void testPreludeSymbolCanBeMutated() throws Exception {
+      scratch.file("tools/build_rules/BUILD");
+      scratch.file(
+          "tools/build_rules/test_prelude", //
+          "foo = ['FOO']");
+      scratch.file(
+          "pkg/BUILD", //
+          "foo.append('BAR')",
+          "print(foo)");
+
+      getConfiguredTarget("//pkg:BUILD");
+      assertContainsEvent("[\"FOO\", \"BAR\"]");
+    }
+
+    // TODO(brandjon): Invert this test once the prelude is a module instead of a syntactic
+    // mutation on BUILD files.
+    @Test
+    public void testPreludeCannotAccessBzlDialectSymbols() throws Exception {
+      scratch.file("tools/build_rules/BUILD");
+      scratch.file(
+          "tools/build_rules/test_prelude", //
+          "v = native.glob()",
+          "foo = 'FOO'");
+      scratch.file(
+          "pkg/BUILD", //
+          "print(foo)");
+
+      reporter.removeHandler(failFastHandler);
+      getConfiguredTarget("//pkg:BUILD");
+      assertContainsEvent("name 'native' is not defined");
+    }
+
+    @Test
+    public void testPreludeNeedNotBePresent() throws Exception {
+      scratch.file(
+          "pkg/BUILD", //
+          "print('FOO')");
+
+      getConfiguredTarget("//pkg:BUILD");
+      assertContainsEvent("FOO");
+    }
+
+    @Test
+    public void testPreludeFileNotRecognizedWithoutPackage() throws Exception {
+      scratch.file(
+          "tools/build_rules/test_prelude", //
+          "foo = 'FOO'");
+      scratch.file(
+          "pkg/BUILD", //
+          "print(foo)");
+
+      // The prelude file is not found without a corresponding package to contain it. BUILD files
+      // get processed as if no prelude file is present.
+      reporter.removeHandler(failFastHandler);
+      getConfiguredTarget("//pkg:BUILD");
+      assertContainsEvent("name 'foo' is not defined");
+    }
+
+    @Test
+    public void testPreludeFailsWhenErrorInPreludeFile() throws Exception {
+      scratch.file("tools/build_rules/BUILD");
+      scratch.file(
+          "tools/build_rules/test_prelude", //
+          "1//0", // <-- dynamic error
+          "foo = 'FOO'");
+      scratch.file(
+          "pkg/BUILD", //
+          "print(foo)");
+
+      reporter.removeHandler(failFastHandler);
+      getConfiguredTarget("//pkg:BUILD");
+      assertContainsEvent(
+          "File \"/workspace/tools/build_rules/test_prelude\", line 1, column 2, in <toplevel>");
+      assertContainsEvent("Error: integer division by zero");
+    }
+
+    @Test
+    public void testPreludeWorksEvenWhenPreludePackageInError() throws Exception {
+      scratch.file(
+          "tools/build_rules/BUILD", //
+          "1//0"); // <-- dynamic error
+      scratch.file(
+          "tools/build_rules/test_prelude", //
+          "foo = 'FOO'");
+      scratch.file(
+          "pkg/BUILD", //
+          "print(foo)");
+
+      // Succeeds because prelude loading is only dependent on the prelude package's existence, not
+      // its evaluation.
+      getConfiguredTarget("//pkg:BUILD");
+      assertContainsEvent("FOO");
+    }
+
+    // Another hypothetical test case we could try: Confirm that it's possible to explicitly load
+    // the prelude file as a regular .bzl. We don't bother testing this use case because, aside from
+    // being arguably pathological, it is currently impossible in practice: The prelude label
+    // doesn't end with ".bzl" and isn't configurable by the user. We also want to eliminate the
+    // prelude, so there's no intention of adding such a feature.
+
+    // Another possible test case: Verify how prelude applies to WORKSPACE files.
   }
 
   private static class CustomInMemoryFs extends InMemoryFileSystem {

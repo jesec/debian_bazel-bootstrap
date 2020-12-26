@@ -157,7 +157,8 @@ public class ActionTemplateExpansionFunction implements SkyFunction {
   }
 
   private GeneratingActions checkActionAndArtifactConflicts(
-      ImmutableList<? extends Action> actions, ActionTemplateExpansionKey key)
+      ImmutableList<? extends Action> actions,
+      ActionTemplateExpansionKey key)
       throws ActionConflictException, ArtifactPrefixConflictException {
     GeneratingActions generatingActions =
         Actions.assignOwnersAndFindAndThrowActionConflict(

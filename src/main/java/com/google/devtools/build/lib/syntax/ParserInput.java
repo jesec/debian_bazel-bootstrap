@@ -20,7 +20,9 @@ import java.nio.charset.StandardCharsets;
 /**
  * The apparent name and contents of a source file, for consumption by the parser. The file name
  * appears in the location information in the syntax tree, and in error messages, but the Starlark
- * interpreter will not attempt to open the file.
+ * interpreter will not attempt to open the file. However, the default behavior of {@link
+ * EvalException#getMessageWithStack} attempts to read the specified file when formatting a stack
+ * trace.
  *
  * <p>The parser consumes a stream of chars (UTF-16 codes), and the syntax positions reported by
  * {@link Node#getStartOffset} and {@link Location.column} are effectively indices into a char
@@ -64,10 +66,9 @@ public final class ParserInput {
    * Returns an input source that reads from a Latin1-encoded byte array. The caller is free to
    * subsequently mutate the array.
    *
-   * @deprecated this function exists to support legacy uses of Latin1 in Bazel. Do not use Latin1
-   *     in new applications.
+   * <p>This function exists to support legacy uses of Latin1 in Bazel. Do not use Latin1 in new
+   * applications. (Consider this deprecated, without the fussy warnings.)
    */
-  @Deprecated
   public static ParserInput fromLatin1(byte[] bytes, String file) {
     char[] chars = new char[bytes.length];
     for (int i = 0; i < bytes.length; i++) {
@@ -79,12 +80,6 @@ public final class ParserInput {
   /** Returns an input source that reads from the given string. */
   public static ParserInput fromString(String content, String file) {
     return fromCharArray(content.toCharArray(), file);
-  }
-
-  /** Deprecated alias for {@link #fromString}. */
-  @Deprecated
-  public static ParserInput create(String content, String file) {
-    return fromString(content, file);
   }
 
   /**

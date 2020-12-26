@@ -57,7 +57,6 @@ import com.google.devtools.build.lib.actions.extra.EnvironmentVariable;
 import com.google.devtools.build.lib.actions.extra.ExtraActionInfo;
 import com.google.devtools.build.lib.analysis.starlark.Args;
 import com.google.devtools.build.lib.bugreport.BugReport;
-import com.google.devtools.build.lib.cmdline.Label;
 import com.google.devtools.build.lib.cmdline.LabelConstants;
 import com.google.devtools.build.lib.collect.CollectionUtils;
 import com.google.devtools.build.lib.collect.nestedset.NestedSet;
@@ -76,7 +75,7 @@ import com.google.devtools.build.lib.server.FailureDetails.CppCompile;
 import com.google.devtools.build.lib.server.FailureDetails.CppCompile.Code;
 import com.google.devtools.build.lib.server.FailureDetails.FailureDetail;
 import com.google.devtools.build.lib.skyframe.ActionExecutionValue;
-import com.google.devtools.build.lib.skylarkbuildapi.CommandLineArgsApi;
+import com.google.devtools.build.lib.starlarkbuildapi.CommandLineArgsApi;
 import com.google.devtools.build.lib.syntax.EvalException;
 import com.google.devtools.build.lib.syntax.Sequence;
 import com.google.devtools.build.lib.syntax.StarlarkList;
@@ -214,8 +213,7 @@ public class CppCompileAction extends AbstractAction implements IncludeScannable
    *     succeed, can be empty but not null, for example, extra sources for FDO.
    * @param inputsForInvalidation are there only to invalidate this action when they change, but are
    *     not needed during actual execution.
-   * @param outputFile the object file that is written as result of the compilation, or the fake
-   *     object for {@link FakeCppCompileAction}s
+   * @param outputFile the object file that is written as result of the compilation
    * @param dotdFile the .d file that is generated as a side-effect of compilation
    * @param gcnoFile the coverage notes that are written in coverage mode, can be null
    * @param dwoFile the .dwo output file where debug information is stored for Fission builds (null
@@ -439,10 +437,9 @@ public class CppCompileAction extends AbstractAction implements IncludeScannable
         throw new IllegalStateException(e.getCause());
       }
     } catch (ExecException e) {
-      Label label = getOwner().getLabel();
       throw e.toActionExecutionException(
-          "Include scanning of rule '" + label + "'",
-          actionExecutionContext.showVerboseFailures(label),
+          "Include scanning of rule '" + getOwner().getLabel() + "'",
+          actionExecutionContext.getVerboseFailures(),
           this);
     }
   }
@@ -981,6 +978,27 @@ public class CppCompileAction extends AbstractAction implements IncludeScannable
     return executionInfo;
   }
 
+  private boolean validateInclude(
+      ActionExecutionContext actionExecutionContext,
+      Set<Artifact> allowedIncludes,
+      Set<PathFragment> looseHdrsDirs,
+      Iterable<PathFragment> ignoreDirs,
+      Artifact include) {
+    // Only declared modules are added to an action and so they are always valid.
+    return include.isFileType(CppFileTypes.CPP_MODULE)
+        ||
+        // TODO(b/145253507): Exclude objc module maps from check, due to bad interaction with
+        // local_objc_modules feature.
+        include.isFileType(CppFileTypes.OBJC_MODULE_MAP)
+        ||
+        // It's a declared include/
+        allowedIncludes.contains(include)
+        ||
+        // Ignore headers from built-in include directories.
+        FileSystemUtils.startsWithAny(include.getExecPath(), ignoreDirs)
+        || isDeclaredIn(cppConfiguration, actionExecutionContext, include, looseHdrsDirs);
+  }
+
   /**
    * Enforce that the includes actually visited during the compile were properly declared in the
    * rules.
@@ -1023,28 +1041,10 @@ public class CppCompileAction extends AbstractAction implements IncludeScannable
 
     // Copy the nested sets to hash sets for fast contains checking, but do so lazily.
     // Avoid immutable sets here to limit memory churn.
-    Set<PathFragment> looseHdrsDirs = null;
+    Set<PathFragment> looseHdrsDirs = ccCompilationContext.getLooseHdrsDirs().toSet();
     for (Artifact input : inputsForValidation.toList()) {
-      // Only declared modules are added to an action and so they are always valid.
-      if (input.isFileType(CppFileTypes.CPP_MODULE)) {
-        continue;
-      }
-      // TODO(b/145253507): Exclude objc module maps from check, due to bad interaction with
-      // local_objc_modules feature.
-      if (input.isFileType(CppFileTypes.OBJC_MODULE_MAP)) {
-        continue;
-      }
-      if (allowedIncludes.contains(input)) {
-        continue;
-      }
-      // Ignore headers from built-in include directories.
-      if (FileSystemUtils.startsWithAny(input.getExecPath(), ignoreDirs)) {
-        continue;
-      }
-      if (looseHdrsDirs == null) {
-        looseHdrsDirs = Sets.newHashSet(ccCompilationContext.getLooseHdrsDirs().toList());
-      }
-      if (!isDeclaredIn(cppConfiguration, actionExecutionContext, input, looseHdrsDirs)) {
+      if (!validateInclude(
+          actionExecutionContext, allowedIncludes, looseHdrsDirs, ignoreDirs, input)) {
         errors.add(input.getExecPath().toString());
       }
     }
@@ -1309,7 +1309,10 @@ public class CppCompileAction extends AbstractAction implements IncludeScannable
 
   /** For actions that discover inputs, the key must include input names. */
   @Override
-  public void computeKey(ActionKeyContext actionKeyContext, Fingerprint fp)
+  public void computeKey(
+      ActionKeyContext actionKeyContext,
+      @Nullable Artifact.ArtifactExpander artifactExpander,
+      Fingerprint fp)
       throws CommandLineExpansionException {
     computeKey(
         actionKeyContext,
@@ -1829,10 +1832,9 @@ public class CppCompileAction extends AbstractAction implements IncludeScannable
         dotDContents = getDotDContents(spawnResults.get(0));
       } catch (ExecException e) {
         copyTempOutErrToActionOutErr();
-        Label label = getOwner().getLabel();
         throw e.toActionExecutionException(
-            "C++ compilation of rule '" + label + "'",
-            actionExecutionContext.showVerboseFailures(label),
+            "C++ compilation of rule '" + getOwner().getLabel() + "'",
+            actionExecutionContext.getVerboseFailures(),
             CppCompileAction.this);
       } catch (InterruptedException e) {
         copyTempOutErrToActionOutErr();
@@ -1924,7 +1926,7 @@ public class CppCompileAction extends AbstractAction implements IncludeScannable
                   e, createFailureDetail("OutErr copy failure", Code.COPY_OUT_ERR_FAILURE))
               .toActionExecutionException(
                   getRawProgressMessage(),
-                  actionExecutionContext.showVerboseFailures(getOwner().getLabel()),
+                  actionExecutionContext.getVerboseFailures(),
                   CppCompileAction.this);
         }
       }

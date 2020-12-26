@@ -22,6 +22,7 @@ import com.google.common.collect.Streams;
 import com.google.devtools.build.lib.actions.Artifact;
 import com.google.devtools.build.lib.actions.FailAction;
 import com.google.devtools.build.lib.actions.MutableActionGraph.ActionConflictException;
+import com.google.devtools.build.lib.analysis.Allowlist;
 import com.google.devtools.build.lib.analysis.AnalysisUtils;
 import com.google.devtools.build.lib.analysis.ConfiguredTarget;
 import com.google.devtools.build.lib.analysis.FileProvider;
@@ -31,6 +32,7 @@ import com.google.devtools.build.lib.analysis.OutputGroupInfo;
 import com.google.devtools.build.lib.analysis.RuleConfiguredTargetBuilder;
 import com.google.devtools.build.lib.analysis.RuleConfiguredTargetFactory;
 import com.google.devtools.build.lib.analysis.RuleContext;
+import com.google.devtools.build.lib.analysis.RuleErrorConsumer;
 import com.google.devtools.build.lib.analysis.Runfiles;
 import com.google.devtools.build.lib.analysis.RunfilesProvider;
 import com.google.devtools.build.lib.analysis.TransitionMode;
@@ -45,7 +47,6 @@ import com.google.devtools.build.lib.packages.AttributeMap;
 import com.google.devtools.build.lib.packages.BuildType;
 import com.google.devtools.build.lib.packages.ImplicitOutputsFunction;
 import com.google.devtools.build.lib.packages.RawAttributeMapper;
-import com.google.devtools.build.lib.packages.RuleErrorConsumer;
 import com.google.devtools.build.lib.packages.TargetUtils;
 import com.google.devtools.build.lib.packages.Type;
 import com.google.devtools.build.lib.rules.cpp.CcCommon.CcFlagsSupplier;
@@ -76,6 +77,8 @@ public abstract class CcLibrary implements RuleConfiguredTargetFactory {
 
   /** A string constant for the name of Windows def file output group. */
   public static final String DEF_FILE_OUTPUT_GROUP_NAME = "def_file";
+
+  public static final String IMPLICIT_OUTPUTS_ALLOWLIST = "allowed_cc_lib_implicit_outputs";
 
   private final CppSemantics semantics;
 
@@ -460,7 +463,9 @@ public abstract class CcLibrary implements RuleConfiguredTargetFactory {
             ruleContext.getFragment(CppConfiguration.class),
             ccToolchain,
             featureConfiguration,
-            ruleContext);
+            ruleContext,
+            /* generateHeaderTokensGroup= */ true,
+            /* addSelfHeaderTokens= */ true);
     CcStarlarkApiProvider.maybeAdd(ruleContext, targetBuilder);
     targetBuilder
         .setFilesToBuild(filesToBuild)
@@ -480,13 +485,17 @@ public abstract class CcLibrary implements RuleConfiguredTargetFactory {
         .addOutputGroup(
             OutputGroupInfo.HIDDEN_TOP_LEVEL,
             collectHiddenTopLevelArtifacts(
-                ruleContext, ccToolchain, ccCompilationOutputs, featureConfiguration))
-        .addOutputGroup(
-            CcCompilationHelper.HIDDEN_HEADER_TOKENS,
-            CcCompilationHelper.collectHeaderTokens(
-                ruleContext,
-                ruleContext.getFragment(CppConfiguration.class),
-                ccCompilationOutputs));
+                ruleContext, ccToolchain, ccCompilationOutputs, featureConfiguration));
+
+    maybeAddDeniedImplicitOutputsProvider(targetBuilder, ruleContext);
+  }
+
+  private static void maybeAddDeniedImplicitOutputsProvider(
+      RuleConfiguredTargetBuilder targetBuilder, RuleContext ruleContext) {
+    if (ruleContext.getRule().getImplicitOutputsFunction() != ImplicitOutputsFunction.NONE
+        && !Allowlist.isAvailable(ruleContext, IMPLICIT_OUTPUTS_ALLOWLIST)) {
+      targetBuilder.addNativeDeclaredProvider(new DeniedImplicitOutputMarkerProvider());
+    }
   }
 
   private static NestedSet<Artifact> collectHiddenTopLevelArtifacts(

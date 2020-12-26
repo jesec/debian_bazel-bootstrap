@@ -44,6 +44,7 @@ import com.google.devtools.build.lib.analysis.OutputGroupInfo;
 import com.google.devtools.build.lib.analysis.RuleConfiguredTargetBuilder;
 import com.google.devtools.build.lib.analysis.RuleConfiguredTargetFactory;
 import com.google.devtools.build.lib.analysis.RuleContext;
+import com.google.devtools.build.lib.analysis.RuleErrorConsumer;
 import com.google.devtools.build.lib.analysis.Runfiles;
 import com.google.devtools.build.lib.analysis.RunfilesProvider;
 import com.google.devtools.build.lib.analysis.TransitionMode;
@@ -62,7 +63,6 @@ import com.google.devtools.build.lib.collect.nestedset.Order;
 import com.google.devtools.build.lib.concurrent.ThreadSafety.Immutable;
 import com.google.devtools.build.lib.packages.BuildType;
 import com.google.devtools.build.lib.packages.RuleClass;
-import com.google.devtools.build.lib.packages.RuleErrorConsumer;
 import com.google.devtools.build.lib.packages.TriState;
 import com.google.devtools.build.lib.packages.Type;
 import com.google.devtools.build.lib.rules.android.AndroidBinaryMobileInstall.MobileInstallResourceApks;
@@ -507,7 +507,9 @@ public abstract class AndroidBinary implements RuleConfiguredTargetFactory {
         ruleContext.getImplicitOutputArtifact(AndroidRuleClasses.ANDROID_BINARY_UNSIGNED_APK);
     Artifact zipAlignedApk =
         ruleContext.getImplicitOutputArtifact(AndroidRuleClasses.ANDROID_BINARY_APK);
-    Artifact signingKey = AndroidCommon.getApkDebugSigningKey(ruleContext);
+    ImmutableList<Artifact> signingKeys = AndroidCommon.getApkDebugSigningKeys(ruleContext);
+    Artifact signingLineage =
+        ruleContext.getPrerequisiteArtifact("debug_signing_lineage_file", TransitionMode.HOST);
     FilesToRunProvider resourceExtractor =
         ruleContext.getExecutablePrerequisite("$resource_extractor", TransitionMode.HOST);
 
@@ -577,7 +579,8 @@ public abstract class AndroidBinary implements RuleConfiguredTargetFactory {
         .setNativeLibs(nativeLibs)
         .setUnsignedApk(unsignedApk)
         .setSignedApk(zipAlignedApk)
-        .setSigningKey(signingKey)
+        .setSigningKeys(signingKeys)
+        .setSigningLineageFile(signingLineage)
         .setZipalignApk(true)
         .registerActions(ruleContext);
 
@@ -668,7 +671,8 @@ public abstract class AndroidBinary implements RuleConfiguredTargetFactory {
           mobileInstallResourceApks,
           resourceExtractor,
           nativeLibsAar,
-          signingKey,
+          signingKeys,
+          signingLineage,
           additionalMergedManifests);
     }
 
@@ -692,7 +696,8 @@ public abstract class AndroidBinary implements RuleConfiguredTargetFactory {
                 unsignedApk,
                 getCoverageInstrumentationJarForApk(ruleContext),
                 resourceApk.getManifest(),
-                AndroidCommon.getApkDebugSigningKey(ruleContext)))
+                signingKeys,
+                signingLineage))
         .addNativeDeclaredProvider(new AndroidPreDexJarProvider(jarToDex))
         .addNativeDeclaredProvider(
             AndroidFeatureFlagSetProvider.create(

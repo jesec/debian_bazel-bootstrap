@@ -58,7 +58,6 @@ import com.google.devtools.build.lib.skyframe.serialization.autocodec.AutoCodec;
 import com.google.devtools.build.lib.skyframe.serialization.autocodec.AutoCodec.VisibleForSerialization;
 import com.google.devtools.build.lib.syntax.EvalException;
 import com.google.devtools.build.lib.syntax.Location;
-import com.google.devtools.build.lib.syntax.Sequence;
 import com.google.devtools.build.lib.syntax.Starlark;
 import com.google.devtools.build.lib.syntax.StarlarkCallable;
 import com.google.devtools.build.lib.syntax.StarlarkThread;
@@ -141,11 +140,15 @@ public class RuleClass {
 
   @AutoCodec
   static final Function<? super Rule, Map<String, Label>> NO_EXTERNAL_BINDINGS =
-      Functions.<Map<String, Label>>constant(ImmutableMap.<String, Label>of());
+      Functions.constant(ImmutableMap.of());
+
+  @AutoCodec
+  static final Function<? super Rule, List<String>> NO_TOOLCHAINS_TO_REGISTER =
+      Functions.constant(ImmutableList.of());
 
   @AutoCodec
   static final Function<? super Rule, Set<String>> NO_OPTION_REFERENCE =
-      Functions.<Set<String>>constant(ImmutableSet.<String>of());
+      Functions.constant(ImmutableSet.of());
 
   public static final PathFragment THIRD_PARTY_PREFIX = PathFragment.create("third_party");
   public static final PathFragment EXPERIMENTAL_PREFIX = PathFragment.create("experimental");
@@ -231,19 +234,19 @@ public class RuleClass {
      * configured target creation in cases where it can no longer continue.
      */
     final class RuleErrorException extends Exception {
-      RuleErrorException() {
+      public RuleErrorException() {
         super();
       }
 
-      RuleErrorException(String message) {
+      public RuleErrorException(String message) {
         super(message);
       }
 
-      RuleErrorException(Throwable cause) {
+      public RuleErrorException(Throwable cause) {
         super(cause);
       }
 
-      RuleErrorException(String message, Throwable cause) {
+      public RuleErrorException(String message, Throwable cause) {
         super(message, cause);
       }
     }
@@ -674,6 +677,8 @@ public class RuleClass {
     private BuildSetting buildSetting = null;
     private Function<? super Rule, Map<String, Label>> externalBindingsFunction =
         NO_EXTERNAL_BINDINGS;
+    private Function<? super Rule, ? extends List<String>> toolchainsToRegisterFunction =
+        NO_TOOLCHAINS_TO_REGISTER;
     private Function<? super Rule, ? extends Set<String>> optionReferenceFunction =
         NO_OPTION_REFERENCE;
     /** This field and the next are null iff the rule is native. */
@@ -821,6 +826,7 @@ public class RuleClass {
           assertStarlarkRuleClassHasEnvironmentLabel();
         }
         Preconditions.checkState(externalBindingsFunction == NO_EXTERNAL_BINDINGS);
+        Preconditions.checkState(toolchainsToRegisterFunction == NO_TOOLCHAINS_TO_REGISTER);
       }
       if (type == RuleClassType.PLACEHOLDER) {
         Preconditions.checkNotNull(ruleDefinitionEnvironmentDigest, this.name);
@@ -885,6 +891,7 @@ public class RuleClass {
           advertisedProviders.build(),
           configuredTargetFunction,
           externalBindingsFunction,
+          toolchainsToRegisterFunction,
           optionReferenceFunction,
           ruleDefinitionEnvironmentLabel,
           ruleDefinitionEnvironmentDigest,
@@ -1274,6 +1281,12 @@ public class RuleClass {
       return this;
     }
 
+    public Builder setToolchainsToRegisterFunction(
+        Function<? super Rule, ? extends List<String>> func) {
+      this.toolchainsToRegisterFunction = func;
+      return this;
+    }
+
     /**
      * Sets the rule definition environment label and transitive digest. Meant for Starlark usage.
      */
@@ -1616,6 +1629,9 @@ public class RuleClass {
    */
   private final Function<? super Rule, Map<String, Label>> externalBindingsFunction;
 
+  /** Returns the toolchains a workspace function wants to have registered in the WORKSPACE file. */
+  private final Function<? super Rule, ? extends List<String>> toolchainsToRegisterFunction;
+
   /**
    * Returns the options referenced by this rule's attributes.
    */
@@ -1695,6 +1711,7 @@ public class RuleClass {
       AdvertisedProviderSet advertisedProviders,
       @Nullable StarlarkCallable configuredTargetFunction,
       Function<? super Rule, Map<String, Label>> externalBindingsFunction,
+      Function<? super Rule, ? extends List<String>> toolchainsToRegisterFunction,
       Function<? super Rule, ? extends Set<String>> optionReferenceFunction,
       @Nullable Label ruleDefinitionEnvironmentLabel,
       @Nullable byte[] ruleDefinitionEnvironmentDigest,
@@ -1727,6 +1744,7 @@ public class RuleClass {
     this.advertisedProviders = advertisedProviders;
     this.configuredTargetFunction = configuredTargetFunction;
     this.externalBindingsFunction = externalBindingsFunction;
+    this.toolchainsToRegisterFunction = toolchainsToRegisterFunction;
     this.optionReferenceFunction = optionReferenceFunction;
     this.ruleDefinitionEnvironmentLabel = ruleDefinitionEnvironmentLabel;
     this.ruleDefinitionEnvironmentDigest = ruleDefinitionEnvironmentDigest;
@@ -2235,12 +2253,13 @@ public class RuleClass {
       }
     }
 
-    // An instance of the built-in 'test_suite' rule with no explicit 'tests'
-    // attribute gets an '$implicit_tests' attribute, whose value is a
-    // shared per-package list of all test labels, populated later.
+    // An instance of the built-in 'test_suite' rule with an undefined or empty 'tests' attribute
+    // attribute gets an '$implicit_tests' attribute, whose value is a shared per-package list of
+    // all test labels, populated later.
     if (this.name.equals("test_suite")) {
       Attribute implicitTests = this.getAttributeByName("$implicit_tests");
-      if (implicitTests != null && !definedAttrIndices.get(this.getAttributeIndex("tests"))) {
+      if (implicitTests != null
+          && NonconfigurableAttributeMapper.of(rule).get("tests", BuildType.LABEL_LIST).isEmpty()) {
         boolean explicit = true; // so that it appears in query output
         rule.setAttributeValue(implicitTests, pkgBuilder.testSuiteImplicitTests, explicit);
       }
@@ -2304,30 +2323,6 @@ public class RuleClass {
 
     rule.setAttributeValue(configDepsAttribute, ImmutableList.copyOf(configLabels),
         /*explicit=*/false);
-  }
-
-  public void checkAttributesNonEmpty(
-      RuleErrorConsumer ruleErrorConsumer, AttributeMap attributes) {
-    for (String attributeName : attributes.getAttributeNames()) {
-      Attribute attr = attributes.getAttributeDefinition(attributeName);
-      if (!attr.isNonEmpty()) {
-        continue;
-      }
-      Object attributeValue = attributes.get(attributeName, attr.getType());
-
-      boolean isEmpty = false;
-      if (attributeValue instanceof Sequence) {
-        isEmpty = ((Sequence<?>) attributeValue).isEmpty();
-      } else if (attributeValue instanceof List<?>) {
-        isEmpty = ((List<?>) attributeValue).isEmpty();
-      } else if (attributeValue instanceof Map<?, ?>) {
-        isEmpty = ((Map<?, ?>) attributeValue).isEmpty();
-      }
-
-      if (isEmpty) {
-        ruleErrorConsumer.attributeError(attr.getName(), "attribute must be non empty");
-      }
-    }
   }
 
   /**
@@ -2588,6 +2583,16 @@ public class RuleClass {
    */
   public Function<? super Rule, Map<String, Label>> getExternalBindingsFunction() {
     return externalBindingsFunction;
+  }
+
+  /**
+   * Returns a function that computes the toolchains that should be registered for a repository
+   * function.
+   *
+   * @return
+   */
+  public Function<? super Rule, ? extends List<String>> getToolchainsToRegisterFunction() {
+    return toolchainsToRegisterFunction;
   }
 
   /**

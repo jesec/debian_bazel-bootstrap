@@ -14,7 +14,6 @@
 package com.google.devtools.build.lib.query2.common;
 
 import com.google.common.base.Preconditions;
-import com.google.common.base.Predicate;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
@@ -38,6 +37,7 @@ import com.google.devtools.build.lib.query2.engine.QueryException;
 import com.google.devtools.build.lib.query2.engine.QueryExpression;
 import com.google.devtools.build.lib.query2.engine.QueryExpressionContext;
 import com.google.devtools.build.lib.query2.engine.ThreadSafeOutputFormatterCallback;
+import com.google.devtools.build.lib.server.FailureDetails.Query;
 import java.io.IOException;
 import java.util.Collection;
 import java.util.LinkedHashSet;
@@ -45,6 +45,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Predicate;
 
 /**
  * {@link QueryEnvironment} that can evaluate queries to produce a result, and implements as much of
@@ -140,7 +141,7 @@ public abstract class AbstractBlazeQueryEnvironment<T> extends AbstractQueryEnvi
       preloadOrThrow(expr, targetPatternSet);
     } catch (TargetParsingException e) {
       // Unfortunately, by evaluating the patterns in parallel, we lose some location information.
-      throw new QueryException(expr, e.getMessage());
+      throw new QueryException(expr, e.getMessage(), e.getDetailedExitCode().getFailureDetail());
     }
     IOException ioExn = null;
     boolean failFast = true;
@@ -172,8 +173,9 @@ public abstract class AbstractBlazeQueryEnvironment<T> extends AbstractQueryEnvi
       if (!keepGoing) {
         // This case represents loading-phase errors reported during evaluation
         // of target patterns that don't cause evaluation to fail per se.
-        throw new QueryException("Evaluation of query \"" + expr
-            + "\" failed due to BUILD file errors");
+        throw new QueryException(
+            "Evaluation of query \"" + expr + "\" failed due to BUILD file errors",
+            Query.Code.BUILD_FILE_ERROR);
       } else {
         eventHandler.handle(Event.warn("--keep_going specified, ignoring errors.  "
             + "Results may be inaccurate"));
@@ -225,7 +227,7 @@ public abstract class AbstractBlazeQueryEnvironment<T> extends AbstractQueryEnvi
   @Override
   public void reportBuildFileError(QueryExpression caller, String message) throws QueryException {
     if (!keepGoing) {
-      throw new QueryException(caller, message);
+      throw new QueryException(caller, message, Query.Code.BUILD_FILE_ERROR);
     } else {
       // Keep consistent with evaluateQuery() above.
       eventHandler.handle(Event.error("Evaluation of query \"" + caller + "\" failed: " + message));
@@ -253,10 +255,10 @@ public abstract class AbstractBlazeQueryEnvironment<T> extends AbstractQueryEnvi
   }
 
   protected boolean validateScope(Label label, boolean strict) throws QueryException {
-    if (!labelFilter.apply(label)) {
+    if (!labelFilter.test(label)) {
       String error = String.format("target '%s' is not within the scope of the query", label);
       if (strict) {
-        throw new QueryException(error);
+        throw new QueryException(error, Query.Code.TARGET_NOT_IN_UNIVERSE_SCOPE);
       } else {
         eventHandler.handle(Event.warn(error + ". Skipping"));
         return false;

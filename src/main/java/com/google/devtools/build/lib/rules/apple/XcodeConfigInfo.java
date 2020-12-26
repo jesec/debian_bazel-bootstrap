@@ -22,7 +22,7 @@ import com.google.devtools.build.lib.concurrent.ThreadSafety.Immutable;
 import com.google.devtools.build.lib.packages.BuiltinProvider;
 import com.google.devtools.build.lib.packages.NativeInfo;
 import com.google.devtools.build.lib.rules.apple.ApplePlatform.PlatformType;
-import com.google.devtools.build.lib.skylarkbuildapi.apple.XcodeConfigInfoApi;
+import com.google.devtools.build.lib.starlarkbuildapi.apple.XcodeConfigInfoApi;
 import com.google.devtools.build.lib.syntax.Dict;
 import com.google.devtools.build.lib.syntax.EvalException;
 import java.util.Map;
@@ -144,7 +144,7 @@ public class XcodeConfigInfo extends NativeInfo
             DottedVersion.fromString(xcodeVersion),
             Availability.UNKNOWN);
       } catch (DottedVersion.InvalidDottedVersionException e) {
-        throw new EvalException(null, e);
+        throw new EvalException(e);
       }
     }
   }
