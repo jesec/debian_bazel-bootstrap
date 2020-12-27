@@ -1,0 +1,3 @@
+Tests: test-bazel
+Depends: @, junit4
+Restrictions: allow-stderr
