@@ -1,3 +1,9 @@
+bazel-bootstrap (3.5.1+ds-2) unstable; urgency=high
+
+  * Fix Out-of-Memory build errors on some architectures
+
+ -- Olek Wojnar <olek@debian.org>  Sun, 27 Dec 2020 12:27:56 -0500
+
 bazel-bootstrap (3.5.1+ds-1) unstable; urgency=high
 
   * New upstream version (Closes: #976563, #978189)
