@@ -1,6 +1,7 @@
 bazel-bootstrap (3.5.1+ds-2) unstable; urgency=high
 
   * Fix Out-of-Memory build errors on some architectures
+  * Add patch to enable junit4 usage in Debian
 
  -- Olek Wojnar <olek@debian.org>  Sun, 27 Dec 2020 12:27:56 -0500
 
