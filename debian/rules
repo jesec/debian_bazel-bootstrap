@@ -59,8 +59,8 @@ override_dh_auto_build:
 override_dh_auto_clean:
 	dh_auto_clean
 	rm -rf derived
-	rm -f output
-	rm -f bazel-*
+	rm -rf output
+	rm -rf bazel-*
 
 override_dh_install:
 	mkdir -p debian/tmp

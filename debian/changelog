@@ -3,8 +3,9 @@ bazel-bootstrap (3.5.1+ds-2) unstable; urgency=high
   * Fix Out-of-Memory build errors on some architectures
   * Add patch to enable junit4 usage in Debian
   * Enable autopkgtest using packaged example code
+  * Update d/rules (Closes: #979305)
 
- -- Olek Wojnar <olek@debian.org>  Sun, 27 Dec 2020 12:27:56 -0500
+ -- Olek Wojnar <olek@debian.org>  Mon, 04 Jan 2021 23:38:34 -0500
 
 bazel-bootstrap (3.5.1+ds-1) unstable; urgency=high
 
