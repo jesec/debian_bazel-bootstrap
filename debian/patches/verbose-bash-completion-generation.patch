@@ -1,0 +1,16 @@
+Description: Add verbose debug info to bash completion creation
+ Also increase timeout to prevent failures on slow build machines.
+Author: Olek Wojnar <olek@debian.org>
+Forwarded: not-needed
+Last-Update: 2021-02-22
+
+--- a/scripts/generate_bash_completion.sh
++++ b/scripts/generate_bash_completion.sh
+@@ -69,6 +69,7 @@
+ server_javabase_flag=
+ [ -z "${javabase}" ] || server_javabase_flag="--server_javabase=${javabase}"
+ "${bazel}" --output_user_root="${tempdir}/root" ${server_javabase_flag} \
++    --client_debug --connect_timeout_secs=1200 \
+     help completion >>"${tempdir}/output"
+ 
+ [ -z "${append}" ] || cat ${append} >>"${tempdir}/output"
