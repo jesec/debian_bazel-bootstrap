@@ -9,7 +9,7 @@ bazel-bootstrap (3.5.1+ds-3) unstable; urgency=high
     - Add Dockerfiles for architecture-specific test builds
   * Update autopkgtests
 
- -- Olek Wojnar <olek@debian.org>  Fri, 12 Feb 2021 15:08:50 -0500
+ -- Olek Wojnar <olek@debian.org>  Mon, 22 Feb 2021 12:15:49 -0500
 
 bazel-bootstrap (3.5.1+ds-2) unstable; urgency=high
 
