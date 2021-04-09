@@ -217,7 +217,7 @@ public class DynamicSpawnStrategyTest {
 
   @Before
   public void setUp() throws Exception {
-    testRoot = FileSystems.getNativeFileSystem().getPath(TestUtils.tmpDir());
+    testRoot = FileSystems.getNativeFileSystem().getPath(TestUtils.tmpDir()).getRelative("test");
     testRoot.deleteTreesBelow();
     outErr = new FileOutErr(testRoot.getRelative("stdout"), testRoot.getRelative("stderr"));
   }
@@ -711,7 +711,7 @@ public class DynamicSpawnStrategyTest {
               // for InterruptedException to propagate. Make sure that's the case here by checking
               // that we did indeed wait for the slow process.
               if (!slowCleanupFinished.get()) {
-                fail("Did not await for the other branch to do its cleanup");
+                fail("Did not await for the local branch to do its cleanup");
               }
             });
 

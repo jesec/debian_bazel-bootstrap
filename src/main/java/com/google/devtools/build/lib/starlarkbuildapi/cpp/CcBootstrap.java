@@ -15,13 +15,13 @@
 package com.google.devtools.build.lib.starlarkbuildapi.cpp;
 
 import com.google.common.collect.ImmutableMap;
+import com.google.devtools.build.lib.packages.semantics.BuildLanguageOptions;
 import com.google.devtools.build.lib.starlarkbuildapi.FileApi;
 import com.google.devtools.build.lib.starlarkbuildapi.StarlarkActionFactoryApi;
 import com.google.devtools.build.lib.starlarkbuildapi.StarlarkRuleContextApi;
 import com.google.devtools.build.lib.starlarkbuildapi.core.Bootstrap;
 import com.google.devtools.build.lib.starlarkbuildapi.platform.ConstraintValueInfoApi;
-import com.google.devtools.build.lib.syntax.FlagGuardedValue;
-import com.google.devtools.build.lib.syntax.StarlarkSemantics.FlagIdentifier;
+import net.starlark.java.eval.FlagGuardedValue;
 
 /** {@link Bootstrap} for Starlark objects related to cpp rules. */
 public class CcBootstrap implements Bootstrap {
@@ -39,10 +39,12 @@ public class CcBootstrap implements Bootstrap {
           ? extends ConstraintValueInfoApi,
           ? extends StarlarkRuleContextApi<? extends ConstraintValueInfoApi>,
           ? extends CcToolchainConfigInfoApi,
-          ? extends CcCompilationOutputsApi<? extends FileApi>>
+          ? extends CcCompilationOutputsApi<? extends FileApi>,
+          ? extends CcDebugInfoContextApi>
       ccModule;
 
   private final CcInfoApi.Provider<? extends FileApi> ccInfoProvider;
+  private final DebugPackageInfoApi.Provider<? extends FileApi> debugPackageInfoProvider;
   private final CcToolchainConfigInfoApi.Provider ccToolchainConfigInfoProvider;
   private final PyWrapCcHelperApi<?, ?, ?, ?, ?, ?, ?, ?, ?> pyWrapCcHelper;
   private final GoWrapCcHelperApi<?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?> goWrapCcHelper;
@@ -64,9 +66,11 @@ public class CcBootstrap implements Bootstrap {
               ? extends ConstraintValueInfoApi,
               ? extends StarlarkRuleContextApi<? extends ConstraintValueInfoApi>,
               ? extends CcToolchainConfigInfoApi,
-              ? extends CcCompilationOutputsApi<? extends FileApi>>
+              ? extends CcCompilationOutputsApi<? extends FileApi>,
+              ? extends CcDebugInfoContextApi>
           ccModule,
       CcInfoApi.Provider<? extends FileApi> ccInfoProvider,
+      DebugPackageInfoApi.Provider<? extends FileApi> debugPackageInfoProvider,
       CcToolchainConfigInfoApi.Provider ccToolchainConfigInfoProvider,
       PyWrapCcHelperApi<?, ?, ?, ?, ?, ?, ?, ?, ?> pyWrapCcHelper,
       GoWrapCcHelperApi<?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?> goWrapCcHelper,
@@ -74,6 +78,7 @@ public class CcBootstrap implements Bootstrap {
       PyCcLinkParamsProviderApi.Provider pyCcLinkInfoParamsInfoProvider) {
     this.ccModule = ccModule;
     this.ccInfoProvider = ccInfoProvider;
+    this.debugPackageInfoProvider = debugPackageInfoProvider;
     this.ccToolchainConfigInfoProvider = ccToolchainConfigInfoProvider;
     this.pyWrapCcHelper = pyWrapCcHelper;
     this.goWrapCcHelper = goWrapCcHelper;
@@ -85,15 +90,16 @@ public class CcBootstrap implements Bootstrap {
   public void addBindingsToBuilder(ImmutableMap.Builder<String, Object> builder) {
     builder.put("cc_common", ccModule);
     builder.put("CcInfo", ccInfoProvider);
+    builder.put("DebugPackageInfo", debugPackageInfoProvider);
     builder.put("CcToolchainConfigInfo", ccToolchainConfigInfoProvider);
     builder.put(
         "py_wrap_cc_helper_do_not_use",
         FlagGuardedValue.onlyWhenExperimentalFlagIsTrue(
-            FlagIdentifier.EXPERIMENTAL_GOOGLE_LEGACY_API, pyWrapCcHelper));
+            BuildLanguageOptions.EXPERIMENTAL_GOOGLE_LEGACY_API, pyWrapCcHelper));
     builder.put(
         "go_wrap_cc_helper_do_not_use",
         FlagGuardedValue.onlyWhenExperimentalFlagIsTrue(
-            FlagIdentifier.EXPERIMENTAL_GOOGLE_LEGACY_API, goWrapCcHelper));
+            BuildLanguageOptions.EXPERIMENTAL_GOOGLE_LEGACY_API, goWrapCcHelper));
     builder.put("PyWrapCcInfo", pyWrapCcInfoProvider);
     builder.put("PyCcLinkParamsProvider", pyCcLinkInfoParamsInfoProvider);
   }

@@ -29,10 +29,6 @@ import com.google.devtools.build.lib.cmdline.Label;
 import com.google.devtools.build.lib.events.EventHandler;
 import com.google.devtools.build.lib.skyframe.serialization.autocodec.AutoCodec;
 import com.google.devtools.build.lib.skyframe.serialization.autocodec.AutoCodec.VisibleForSerialization;
-import com.google.devtools.build.lib.syntax.ClassObject;
-import com.google.devtools.build.lib.syntax.Dict;
-import com.google.devtools.build.lib.syntax.EvalException;
-import com.google.devtools.build.lib.syntax.Starlark;
 import com.google.devtools.build.lib.util.StringUtil;
 import com.google.devtools.build.lib.vfs.FileSystemUtils;
 import com.google.devtools.build.lib.vfs.PathFragment;
@@ -44,6 +40,10 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import net.starlark.java.eval.Dict;
+import net.starlark.java.eval.EvalException;
+import net.starlark.java.eval.Starlark;
+import net.starlark.java.eval.Structure;
 
 /**
  * A function interface allowing rules to specify their set of implicit outputs in a more dynamic
@@ -96,11 +96,10 @@ public abstract class ImplicitOutputsFunction {
         // since we don't yet have a build configuration.
         if (!map.isConfigurable(attrName)) {
           Object value = map.get(attrName, attrType);
-          attrValues.put(
-              Attribute.getStarlarkName(attrName), Starlark.fromJava(value, /*mutability=*/ null));
+          attrValues.put(Attribute.getStarlarkName(attrName), Attribute.valueToStarlark(value));
         }
       }
-      ClassObject attrs =
+      Structure attrs =
           StructProvider.STRUCT.create(
               attrValues,
               "Attribute '%s' either doesn't exist "

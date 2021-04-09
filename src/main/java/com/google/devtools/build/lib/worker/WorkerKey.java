@@ -21,6 +21,7 @@ import com.google.devtools.build.lib.actions.ExecutionRequirements.WorkerProtoco
 import com.google.devtools.build.lib.actions.Spawns;
 import com.google.devtools.build.lib.vfs.Path;
 import com.google.devtools.build.lib.vfs.PathFragment;
+import java.util.Objects;
 import java.util.SortedMap;
 
 /**
@@ -150,14 +151,22 @@ final class WorkerKey {
     }
 
     WorkerKey workerKey = (WorkerKey) o;
-
+    if (this.hash != workerKey.hash) {
+      return false;
+    }
     if (!args.equals(workerKey.args)) {
+      return false;
+    }
+    if (!proxied == workerKey.proxied) {
       return false;
     }
     if (!env.equals(workerKey.env)) {
       return false;
     }
     if (!execRoot.equals(workerKey.execRoot)) {
+      return false;
+    }
+    if (!this.protocolFormat.equals(workerKey.protocolFormat)) {
       return false;
     }
     return mnemonic.equals(workerKey.mnemonic);
@@ -171,11 +180,9 @@ final class WorkerKey {
   }
 
   private int calculateHashCode() {
-    int result = args.hashCode();
-    result = 31 * result + env.hashCode();
-    result = 31 * result + execRoot.hashCode();
-    result = 31 * result + mnemonic.hashCode();
-    return result;
+    // Use the string representation of the protocolFormat because the hash of the same enum value
+    // can vary across instances.
+    return Objects.hash(args, env, execRoot, mnemonic, proxied, protocolFormat.toString());
   }
 
   @Override

@@ -33,8 +33,8 @@ import com.google.devtools.build.lib.starlarkbuildapi.go.GoConfigurationApi;
 import com.google.devtools.build.lib.starlarkbuildapi.go.GoContextInfoApi;
 import com.google.devtools.build.lib.starlarkbuildapi.go.GoPackageInfoApi;
 import com.google.devtools.build.lib.starlarkbuildapi.platform.ConstraintValueInfoApi;
-import com.google.devtools.build.lib.syntax.Sequence;
-import com.google.devtools.build.lib.syntax.Tuple;
+import net.starlark.java.eval.Sequence;
+import net.starlark.java.eval.Tuple;
 
 /** Fake implementation of {@link GoWrapCcHelperApi}. */
 public class FakeGoWrapCcHelper
@@ -90,7 +90,7 @@ public class FakeGoWrapCcHelper
   }
 
   @Override
-  public Tuple<FileApi> createGoCompileActions(
+  public Tuple /* of FileApi */ createGoCompileActions(
       StarlarkRuleContextApi<ConstraintValueInfoApi> starlarkRuleContext,
       CcToolchainProviderApi<FeatureConfigurationApi> ccToolchainProvider,
       Sequence<?> srcs,
@@ -99,7 +99,7 @@ public class FakeGoWrapCcHelper
   }
 
   @Override
-  public Tuple<FileApi> createGoCompileActionsGopkg(
+  public Tuple /* of FileApi */ createGoCompileActionsGopkg(
       StarlarkRuleContextApi<ConstraintValueInfoApi> starlarkRuleContext,
       CcToolchainProviderApi<FeatureConfigurationApi> ccToolchainProvider,
       Sequence<?> srcs,

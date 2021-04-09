@@ -19,6 +19,7 @@ import com.google.devtools.build.lib.actions.UserExecException;
 import com.google.devtools.build.lib.server.FailureDetails;
 import com.google.devtools.build.lib.server.FailureDetails.FailureDetail;
 import com.google.devtools.build.lib.server.FailureDetails.Worker.Code;
+import com.google.devtools.build.lib.vfs.Path;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.Semaphore;
@@ -45,9 +46,10 @@ public class WorkerMultiplexerManager {
    * objects with the same {@code WorkerKey} talk to the same {@code WorkerMultiplexer}. Also,
    * record how many {@code WorkerProxy} objects are talking to this {@code WorkerMultiplexer}.
    */
-  public static WorkerMultiplexer getInstance(WorkerKey key) throws InterruptedException {
+  public static WorkerMultiplexer getInstance(WorkerKey key, Path logFile)
+      throws InterruptedException {
     semMultiplexer.acquire();
-    multiplexerInstance.putIfAbsent(key, new InstanceInfo());
+    multiplexerInstance.putIfAbsent(key, new InstanceInfo(logFile, key));
     multiplexerInstance.get(key).increaseRefCount();
     WorkerMultiplexer workerMultiplexer = multiplexerInstance.get(key).getWorkerMultiplexer();
     semMultiplexer.release();
@@ -72,6 +74,19 @@ public class WorkerMultiplexerManager {
       throw createUserExecException(e, message, Code.MULTIPLEXER_INSTANCE_REMOVAL_FAILURE);
     } finally {
       semMultiplexer.release();
+    }
+  }
+
+  /** Is called when a build is done, to do per-build cleanup. */
+  static void afterCommandCleanup() {
+    try {
+      semMultiplexer.acquire();
+      for (InstanceInfo i : multiplexerInstance.values()) {
+        i.getWorkerMultiplexer().setReporter(null);
+      }
+      semMultiplexer.release();
+    } catch (InterruptedException e) {
+      // Interrupted during cleanup, not much we can do.
     }
   }
 
@@ -114,8 +129,8 @@ public class WorkerMultiplexerManager {
     private WorkerMultiplexer workerMultiplexer;
     private Integer refCount;
 
-    public InstanceInfo() {
-      this.workerMultiplexer = new WorkerMultiplexer();
+    public InstanceInfo(Path logFile, WorkerKey workerKey) {
+      this.workerMultiplexer = new WorkerMultiplexer(logFile, workerKey);
       this.refCount = 0;
     }
 
@@ -134,5 +149,11 @@ public class WorkerMultiplexerManager {
     public Integer getRefCount() {
       return refCount;
     }
+  }
+
+  /** Resets the instances. For testing only. */
+  @VisibleForTesting
+  static void reset() {
+    multiplexerInstance.clear();
   }
 }

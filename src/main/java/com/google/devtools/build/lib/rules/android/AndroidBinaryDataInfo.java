@@ -17,7 +17,7 @@ import com.google.devtools.build.lib.actions.Artifact;
 import com.google.devtools.build.lib.packages.BuiltinProvider;
 import com.google.devtools.build.lib.packages.NativeInfo;
 import com.google.devtools.build.lib.starlarkbuildapi.android.AndroidBinaryDataInfoApi;
-import com.google.devtools.build.lib.syntax.EvalException;
+import net.starlark.java.eval.EvalException;
 
 /**
  * Provides information on Android resource, asset, and manifest information specific to binaries.
@@ -53,12 +53,16 @@ public class AndroidBinaryDataInfo extends NativeInfo
       AndroidResourcesInfo resourcesInfo,
       AndroidAssetsInfo assetsInfo,
       AndroidManifestInfo manifestInfo) {
-    super(PROVIDER);
     this.dataApk = dataApk;
     this.resourceProguardConfig = resourceProguardConfig;
     this.resourcesInfo = resourcesInfo;
     this.assetsInfo = assetsInfo;
     this.manifestInfo = manifestInfo;
+  }
+
+  @Override
+  public Provider getProvider() {
+    return PROVIDER;
   }
 
   @Override

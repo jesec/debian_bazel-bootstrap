@@ -40,22 +40,23 @@ import com.google.devtools.build.lib.packages.StarlarkProviderIdentifier;
 import com.google.devtools.build.lib.packages.Type;
 import com.google.devtools.build.lib.packages.Type.ConversionException;
 import com.google.devtools.build.lib.packages.Type.LabelClass;
+import com.google.devtools.build.lib.packages.semantics.BuildLanguageOptions;
 import com.google.devtools.build.lib.skyframe.serialization.autocodec.AutoCodec;
 import com.google.devtools.build.lib.starlarkbuildapi.StarlarkAttrModuleApi;
-import com.google.devtools.build.lib.syntax.Dict;
-import com.google.devtools.build.lib.syntax.EvalException;
-import com.google.devtools.build.lib.syntax.EvalUtils;
-import com.google.devtools.build.lib.syntax.Module;
-import com.google.devtools.build.lib.syntax.Printer;
-import com.google.devtools.build.lib.syntax.Sequence;
-import com.google.devtools.build.lib.syntax.Starlark;
-import com.google.devtools.build.lib.syntax.StarlarkFunction;
-import com.google.devtools.build.lib.syntax.StarlarkThread;
 import com.google.devtools.build.lib.util.FileType;
 import com.google.devtools.build.lib.util.FileTypeSet;
 import java.util.List;
 import java.util.Map;
 import javax.annotation.Nullable;
+import net.starlark.java.eval.Dict;
+import net.starlark.java.eval.EvalException;
+import net.starlark.java.eval.Module;
+import net.starlark.java.eval.Printer;
+import net.starlark.java.eval.Sequence;
+import net.starlark.java.eval.Starlark;
+import net.starlark.java.eval.StarlarkFunction;
+import net.starlark.java.eval.StarlarkInt;
+import net.starlark.java.eval.StarlarkThread;
 
 /**
  * A helper class to provide Attr module in Starlark.
@@ -118,7 +119,7 @@ public final class StarlarkAttrModule implements StarlarkAttrModuleApi {
     Attribute.Builder<?> builder = Attribute.attr(name, type).setDoc(doc);
 
     Object defaultValue = arguments.get(DEFAULT_ARG);
-    if (!EvalUtils.isNullOrNone(defaultValue)) {
+    if (!Starlark.isNullOrNone(defaultValue)) {
       if (defaultValue instanceof StarlarkFunction) {
         // Computed attribute. Non label type attributes already caused a type check error.
         StarlarkCallbackHelper callback =
@@ -238,7 +239,9 @@ public final class StarlarkAttrModule implements StarlarkAttrModuleApi {
         if (starlarkDefinedTransition.isForAnalysisTesting()) {
           builder.hasAnalysisTestTransition();
         } else {
-          if (!thread.getSemantics().experimentalStarlarkConfigTransitions()) {
+          if (!thread
+              .getSemantics()
+              .getBool(BuildLanguageOptions.EXPERIMENTAL_STARLARK_CONFIG_TRANSITIONS)) {
             throw Starlark.errorf(
                 "Starlark-defined transitions on rule attributes is experimental and disabled by "
                     + "default. This API is in development and subject to change at any time. Use "
@@ -248,8 +251,12 @@ public final class StarlarkAttrModule implements StarlarkAttrModuleApi {
         }
         builder.cfg(new StarlarkAttributeTransitionProvider(starlarkDefinedTransition));
       } else if (!trans.equals("target")) {
-        // TODO(b/121134880): update error message when starlark build configurations is ready.
-        throw Starlark.errorf("cfg must be either 'host' or 'target'.");
+        // We don't actively advertise the hard-coded but exposed transitions like
+        // android_split_transition because users of those transitions should already know about
+        // them.
+        throw Starlark.errorf(
+            "cfg must be either 'host', 'target', 'exec' or a starlark defined transition defined"
+                + " by the exec() or transition() functions.");
       }
     }
 
@@ -394,7 +401,7 @@ public final class StarlarkAttrModule implements StarlarkAttrModuleApi {
 
   @Override
   public Descriptor intAttribute(
-      Integer defaultValue,
+      StarlarkInt defaultValue,
       String doc,
       Boolean mandatory,
       Sequence<?> values,

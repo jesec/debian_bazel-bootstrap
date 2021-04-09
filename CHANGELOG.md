@@ -1,53 +1,367 @@
-## Release 3.5.1 (2020-10-01)
+## Release 4.0.0 (2021-01-21)
 
 ```
-Baseline: 889bc0b523b47eeb38a72bf9bb6858ee525a7c7e
+Baseline: 37a429ad12b4c9e6a62dbae4881a1ff03b81ab40
 
 Cherry picks:
 
-   + a7a0d48fbeb059ee60e77580e5d05baeefdd5699:
-     Make no-op starlark transition not affect the output directory.
-   + b37c51c7085f0aefe04034dd451acb847605ddb5:
-     Add include_prefix and strip_include_prefix to cc_common.compile
-   + f6ad35fcde93f92c591778ed7db38d167f5bbc03:
-     Delete --experimental_transparent_compression
-   + 39bc97eab295bddb35b38bfc4a2ff3d2b15d034e:
-     Remove --experimental_action_args
-   + b9706675a7abf6ceebb250f0b3dfa4087a0c35f6:
-     Stop needlessly parsing WORKSPACE files from external
-     repositories.
-   + e574d558da17cfd0f818e7a937a07926aa270069:
-     Allow hyphen char in workspace name
-   + 9993785fa0c4fa4172aa31d306f3abea76833abf:
-     Allow dot ('.') in workspace names.
-   + b3ac8f60973ba60d578ae6a653cdd993a2d206d7:
-     Patch upb to fix build error with gcc 10
-   + 26cbf776e0cdd8fbb9a40aca4c1be6f5313b6eb4:
-     Patch upb to fix build error with gcc 10 (third_party)
-   + f1f941194ce04b96328154241fcfad0392b5cb38:
-     Fix incorrect rule class digest when creating rules through
-     macros.
-   + 6b591a7e20f05224898b31ad5b03ba514eff6118:
-     Prepare for bazel to run with shrunken r8.jar
-   + 7a11752a8ae7689d2bd482e23d466cb44a3261a1:
-     Don't run DexFileMergerTest as it is not supported for all
-     r8.jar's
+   + a689d673abadf80f1efaf8ddaeee92d56fc2847b:
+     Use getRunfilesPath for run_under executable path generation.
+     getRootRelativePath doesn't return a valid runfiles path for
+     external source files anymore after the recent external source
+     root change. Also, it won't work for external labels either once
+     the --nolegacy_external_runfiles becomes default. This fixes
+     issue #12545.
+   + d90ec67fdab9710f649a3c1d374fb6b938b9271a:
+     Fix NPE when coveragerunner is not set on the toolchain.
+   + 8555789dd239a5ac229c1d9cee80b2a9f30b3bf7:
+     Fix the classic query package-loading cutoff optimization with
+     external workspaces.
+   + d113d7454127bba78aa618dac81e5d164920b662:
+     Update turbine
+   + 1489f0f4cae3e9247a70e4003ab76bef45c5b986:
+     Support Scala3 .tasty files
+   + 0d2d95cd7e34b4061c8e5fdfd21ba0ab8818c685:
+     Update to java_tools javac11 release 10.5 (#12647)
+   + a9419f38d5f29af31a6c8ebda09a6e0303a6ba54:
+     Fix common prefix for instrumentation filter
+   + 84fadcf81f81b2d7343ca4151a5639be7f2263ee:
+     Fix builds for filegroup targets with incompatible dependencies
+   + e43825d0bef359f645e1cabf2164fd2db6ee4a35:
+     Revert "Remove
+     --incompatible_blacklisted_protos_requires_proto_info"
+   + 082d58de852ebaa640bcf13cf419cbb94eec2b26:
+     Transform roots along with paths during output deletion.
+   + e8835c1c221d76a2d5532d18083eaa04401619b3:
+     AttributeContainer.Large now handles more than 127 attributes.
+   + e1e87349335ac59f9b3df47cee8b999faeaa6d11:
+     Add an env attribute to all test and binary rule classes
+   + a87d7ed2411d5382bac58a20b79e09c464ad13b9:
+     Take no action to prefetch empty artifacts.
+   + 3e969ff24a6a0e03139b9f288c88451a7dfa97cd:
+     Fix a couple of bugs with Incompatible Target Skipping
+   + e6670825b1e183f81f5c864aafd425d512fa9ff5:
+     Pass --host_action_env to host options hostActionEnvironment
+     attribute
+   + 07400c0392e7be163f8a3396fa5cf89ce6705412:
+     Add --{no,}autodetect_server_javabase.
+   + c83366064621d5a265eba14d93a03deff58fe6d8:
+     Only treat "env" and "env_inherit" attrs specially for native
+     rules
+   + 6a60b30cd0f22d0ab84b2ddd658d5ccb899a8a76:
+     Fix coverage support when using default_java_toolchain. (#12801)
+   + 4158a6f512e52516437e00f8d9609a91be7fc195:
+     Revert JacocoCoverage target to remote_java_tools_java_import
+     and add a new target for remore_java_tools_filegroup. (#12813)
+   + f6d30cf5ef9a8a39fea7072317f89a872387b790:
+     Add windows_msvc back to conditions in bazel_tools.
 ```
 
 New features:
 
-  - cc_common.compile support for include_prefix/strip_include_prefix
+  - Starlark-defined flags can now be shorthanded using --flag_alias.
 
 Important changes:
 
+  - Add --starlark:file option. This adds a capability to the
+    (cquery)[https://docs.bazel.build/versions/master/cquery.html]
+    feature in `--output=starlark` mode so that the expression to
+    format output may
+    be specified in a file.
+  - Error messages emitted when an action fails are reworked to be
+    more informative about the failing action. Some tooling may have
+    to be updated as a result.
+  - Querying with output=location now allows the relative_locations
+    flag to properly display relative locations instead of the full
+    path. Fixes https://github.com/bazelbuild/bazel/issues/3497.
+  - --flag_alias can now be used without
+    --experimental_enable_flag_alias
+  - Remove no-op `--deep_execroot` flag
+  - The BEP uses `AbortReason.OUT_OF_MEMORY` for abort events when
+    the build tool is crashing due to OOM.
+  - Added flag `incompatible_display_source_file_location` for `blaze
+    query location=output` to print the location of line 1 of the
+    actual source files instead of the source file targets. Provides
+    a solution to https://github.com/bazelbuild/bazel/issues/8900.
+  - The Starlark json module is now available.
+    Use json.encode(x) to encode a Starlark value as JSON.
+    struct.to_json(x) is deprecated and will be disabled by
+    the --incompatible_struct_has_no_methods flag.
+  - The flag `--incompatible_objc_compile_info_migration` is enabled
+    by default.  See #10854.
+  - The flag `--incompatible_objc_provider_remove_compile_info` is
+    enabled by default.  See #11359.
+  - Add `relative_ast_path` feature for darwin builds to relativize
+    swiftmodule paths for debugging
+  - Use proto.encode_text(x) to encode a Starlark value as textproto.
+    struct.to_proto() is deprecated and will be disabled by
+    the --incompatible_struct_has_no_methods flag.
+    Both functions now reject list/dict fields that contain list/dict
+    elements.
+  - Add --starlark:file option. This adds a capability to the
+    (cquery)[https://docs.bazel.build/versions/master/cquery.html]
+    feature in `--output=starlark` mode so that the expression to
+    format output may be specified in a file.
+    See [Configured Query Starlark
+    Output](//docs.google.com/document/d/1kL6Tdmp6uLBa9lq_DbUSjIC87glO
+    zKIyPoBeF95Rs4c/edit)
+  - Flipped --incompatble_proto_output_v2 for aquery.
+  - The --incompatible_load_java_rules_from_bzl flag is now a no-op.
+  - The --incompatible_load_proto_rules_from_bzl flag is now a no-op.
+  - Flipped --incompatible_force_strict_header_check_from_starlark
+  - --incompatible_string_replace_count is flipped and removed
+    (#11244)
+  - Bazel skips incompatible targets based on target platform
+    and `target_compatible_with` contents. See
+    https://docs.bazel.build/versions/master/platforms.html for more
+    details.
+  - Bazel returns exit code 36 (rather than 1) if it fails to start a
+    subprocess in a local sandbox due to environmental issues, for
+    example, if the argument list is too long.
+  - //tools/build_defs/pkg:pkg_rpm is no longer built in to Bazel.
+    See https://github.com/bazelbuild/bazel/issues/11218 for
+    instructions
+    on how to migrate to the replacement.
+  - Javac now supports multiplex workers.
+  - The `--default_ios_provisioning_profile` flag has been removed
+    (it was a no-op).
+  - Add support for using AndroidX dependencies in
+    data-binding-enabled targets.
+  - Fix data-binding generation for android_local_test.
+  - Enable debug_prefix_map_pwd_is_dot feature by default on macOS,
+    this passes `-fdebug-prefix-map=$PWD=.` for every compile to
+    remove absolute paths from debug info.
+  - --incompatible_run_shell_command_string is enabled by default
+    (#5903)
+  - py_binary now tolerates package paths that contain hyphens ('-').
+    Note that such paths might not be importable from within Python
+    code.
+  - C++ Starlark API requires linker_inputs wrapping library_to_link.
+    #10860
+  - Toolchain rule is extended with target_settings attribute.
+  - --incompatible_restrict_string_escapes=true is now the default.
+    Unnecessary backslashes such as "\." in string literals are now
+    an error, instead of being silently treated as "\\.".
+    To fix the error while preserving behavior, double the backlash.
+    However, the error is often a sign that the original code was
+    wrong.
+  - Propagate instrumented files for transitive sources of
+    `android_library` and `android_binary`
+  - --local_resources and --incompatible_remove_local_resources have
+    been removed. If you've been setting --local resources or
+    --incompatible_remove_local_resources=false, you must migrate to
+    using --local_ram_resources and --local_cpu_resources instead.
+  - Update rules_cc to commit b1c40e1de81913a3c40e5948f78719c28152486d
+  - --incompatible_avoid_conflict_dlls=true is now the default.
+  - Dynamic execution now uses the new scheduler by default.
+  - Dynamic execution now uses the new scheduler by default.
+  - The new dynamic scheduler is now the default.
+
+This release contains contributions from many people at Google, as well as Adam Liddell, Akira Baruah, Alexander Grund, Alex Eagle, Andrew Z Allen, Austin Schuh, Benjamin Peterson, Benson Muite, Brentley Jones, Cristian Hancila, Dan Halperin, Daniel Wagner-Hall, Dmitry Ivankov, Dmitry Ivankov, erenon, Eric Cousineau, Greg Estren, Gregor Jasny, Grzegorz Lukasik, Grzegorz Lukasik, hollste, Joe Lencioni, johnjbarton, Jonathan Perry, Jonathon Belotti, Keith Smiley, Kevin Gessner, Matt Davis, Matt Mackay, Menny Even Danan, Neeraj Gupta, Philipp Schrader, Ricardo Delfin, Ryan Beasley, Samuel Giddins, Simon Bjorklen, Simon Stewart, Stiopa Koltsov, Thi Doan, ThomasCJY, Timothy Klim, Tom de Goede, vectoralpha, V Vn Ngha, William A Rowe Jr, Xavier Bonaventura, Yannic Bonenberger, Yannic.
+
+## Release 3.7.2 (2020-12-17)
+
+```
+Baseline: a991db7c2f66a354666388d888dcef9b0d0f70c0
+
+Cherry picks:
+
+   + 0d14ec84a06c4da628a7f6d9d1c5f9314392ab15:
+     Release 3.7.0 (2020-10-20)
+   + d563446a77b906807cea86f5c2abafa5900d901a:
+     Add `-XDcompilePolicy=simple` to default javacopts
+   + 6336264e4b0d8cc422ec73e1b923bf8014ace778:
+     Update rules_cc reference to head of rules_cc as of 2020-11-11.
+   + b3f934680554515aa312b5dd4453df5cd38f0aea:
+     Bump rules_cc to support llvm 11.0.0 clang-cl compiler on Windows
+   + e055b433efdccb28b9c21082e72d8e79d9b34e0f:
+     Remove accidentally re-added
+     tools/jdk/java_toolchain_default.bzl.
+   + 02838a1b2aa2f6d03980536ab2ac6840c3c98e84:
+     Avoid the spawn cache if executing dynamically.
+   + d0efd7b9e5109ff5ac6d13c91f58c3fc4dc3afd8:
+     Release 3.7.1 (2020-11-24)
+   + a689d673abadf80f1efaf8ddaeee92d56fc2847b:
+     Use getRunfilesPath for run_under executable path generation.
+     getRootRelativePath doesn't return a valid runfiles path for
+     external source files anymore after the recent external source
+     root change. Also, it won't work for external labels either once
+     the --nolegacy_external_runfiles becomes default. This fixes
+     issue #12545.
+```
+
+Important changes:
+
+  - Update rules_cc to commit b1c40e1de81913a3c40e5948f78719c28152486d
+
+This release contains contributions from many people at Google, as well as William A Rowe Jr.
+
+## Release 3.7.1 (2020-11-24)
+
+```
+Baseline: a991db7c2f66a354666388d888dcef9b0d0f70c0
+
+Cherry picks:
+
+   + 0d14ec84a06c4da628a7f6d9d1c5f9314392ab15:
+     Release 3.7.0 (2020-10-20)
+   + d563446a77b906807cea86f5c2abafa5900d901a:
+     Add `-XDcompilePolicy=simple` to default javacopts
+   + 6336264e4b0d8cc422ec73e1b923bf8014ace778:
+     Update rules_cc reference to head of rules_cc as of 2020-11-11.
+   + b3f934680554515aa312b5dd4453df5cd38f0aea:
+     Bump rules_cc to support llvm 11.0.0 clang-cl compiler on Windows
+   + e055b433efdccb28b9c21082e72d8e79d9b34e0f:
+     Remove accidentally re-added
+     tools/jdk/java_toolchain_default.bzl.
+   + 02838a1b2aa2f6d03980536ab2ac6840c3c98e84:
+     Avoid the spawn cache if executing dynamically.
+```
+
+Important changes:
+
+  - Update rules_cc to commit b1c40e1de81913a3c40e5948f78719c28152486d
+
+This release contains contributions from many people at Google, as well as William A Rowe Jr.
+
+## Release 3.7.0 (2020-10-20)
+
+```
+Baseline: a991db7c2f66a354666388d888dcef9b0d0f70c0
+```
+
+Incompatible changes:
+
+  - The syntax //foo/BUILD can no longer be used on the command line
+    to refer to the //foo:BUILD target. Use //foo:BUILD (preferred)
+    or foo/BUILD instead. This does not affect BUILD/bzl files, where
+    that syntax already didn't work.
+  - This removes `--objc_header_scanner_tool`. The flag was primarily
+    used internally, and to our knowledge, a compatible tool was
+    never released. Therefore this flag is believed to be unused.
+
+New features:
+
+  - select() directly supports constraint_value (no need for an
+    intermediate config_setting).
+
+Important changes:
+
+  - Non-android targets can again be built when
+    android_sdk_repository is present but invalid.
+  - Add a build variable for -install_name / -soname.
+  - Add a build variable for -install_name / -soname.
+  - Include "resources" attr in dependency attributes for java_*
+    coverage configuration.
+  - --trim_test_configuration should work for almost all cases when a
+    non-test target depends on a test.
+  - Javac now supports multiplex workers.
+  - Javac now supports multiplex workers.
+  - Blaze now allows symbolic links that point to their own ancestor
+    unless they are traversed recursively by e.g. a //... recursive
+    target pattern or a recursive glob.
+  - Blaze now allows symbolic links that point to their own ancestor
+    unless they are traversed recursively by e.g. a //... recursive
+    target pattern or a recursive glob.
+  - Blaze now allows symbolic links that point to their own ancestor
+    unless they are traversed recursively by e.g. a //... recursive
+    target pattern or a recursive glob.
+  - Generated Go protobufs no longer depend on //net/proto2/go:proto
+
+This release contains contributions from many people at Google, as well as Benjamin Peterson, Cristian Hancila, Ed Schouten, Fredrik Medley, Greg Estren, jgehw, Jin, Kalle Johansson, Keith Smiley, Kseniia Vasilchuk, Michael Eisel, Michael Hackner, Michael Krasnyk, Mostyn Bramley-Moore, Ruixin Bao, Samuel Giddins, Simon Stewart, Torgil Svensson, Ulf Adams, Vasilios Pantazopoulos, Wenyu Zhang, Yannic Bonenberger, yoav-steinberg.
+
+## Release 3.6.0 (2020-10-06)
+
+```
+Baseline: aa0d97c0bfc4c09ec6f45303aa80052ba28afbd9
+
+Cherry picks:
+
+   + 32c88da98f301333dc447b75564459165368d418:
+     Patch RuleContext for android_binary.deps to restore legacy
+     behavior.
+   + db9fc88fed387f09067a9250a731f8bf9ad74b05:
+     android_test also needs the legacy behavior in
+     RuleContext.getPrerequisites.
+   + 144d5149a0c50e464dd1be0769fed2ce33ab26a4:
+     Update android_sdk_repository to create a valid, but useless,
+     repository
+   + bb11f9235da52eb3b3e462ce0286f1a89188cb89:
+     Patch upb to fix build error with gcc 10
+   + 9f06be482aea3fcadeaf8fca6e48b32f224eba2e:
+     Patch upb to fix build error with gcc 10 (third_party)
+   + b67b75e3a62f5433d812993f3702f431b6967e86:
+     Fix issue where libtool_check_unique isn't found for sandbox
+     builds
+```
+
+Incompatible changes:
+
+  - `--experimental_ui_limit_console_output` is removed. Users of
+    `--experimental_ui_limit_console_output=1` for silencing terminal
+    output should use `--ui_event_filters=` instead.
+  - --proto:instantiation_stack must be enabled in addition to
+    --record_rule_instantiation_callstack to see call stack in proto
+    output from blaze query.
+
+New features:
+
+  - cc_common.compile support for include_prefix/strip_include_prefix
+  - Multiplexed persistent workers: Use
+    --experimental_worker_max_multiplex_instances to configure the
+    number of WorkRequests that are sent concurrently to one worker
+    process. The --worker_max_instances flag will no longer be used
+    to determine max instances for multiplex workers, since the two
+    have different resource requirements. Multiplex workers will by
+    default have a max instances of 8.
+
+Important changes:
+
+  - The prelude file (//tools/build_rules:prelude_bazel) is now
+    processed as a Starlark module, rather than being sourced into
+    the BUILD file textually. This may cause slight breakages
+    depending on the content of the prelude file. (Use of the prelude
+    file is discouraged as it will be removed in the long term.)
+  - Removed --experimental_ignore_deprecated_instrumentation_spec and
+    cleaned up the old deprecated behavior.
+  - Added CODEBASE.md, a description of the Bazel codebase.
   - Removed the flag --experimental_transparent_compression.
   - Removed the flag --experimental_action_args.
   - Stop needlessly parsing WORKSPACE files from external
     repositories.
   - Dot ('.') is now allowed in workspace names. See
     https://github.com/bazelbuild/bazel/issues/11837.
+  - This change can cause memory and performance regressions for some
+    builds with C++ dependencies, due to extra actions being executed.
+    RELNOTES: None
+  - Building Android apps for legacy multi-dex (pre-L) now require a
+    main-dex list if the application does not fit into a single DEX
+    file.
+  - Puts the experimental_worker_multiplex flag to use.
+  - In Starlark, the Args object supports a new parameter file format
+    'flag_per_line', compatible with the Abseil flags library.
+  - The flag --incompatible_no_support_tools_in_action_inputs is
+    removed.
+  - Support for NDK 21 added
+  - Bazel will now skip printing action stdout/stderr contents if
+    they exceed --experimental_ui_max_stdouterr_memory_bytes.
+  - The Starlark interpreter now correctly emits an error
+     if the operand of the first loop in a list comprehension
+     refers to a variable bound by a later loop, such as y in
+     this example:
+       [e1 for x in f(y) in e2 for y in e3] # error: undefined y
+                      ^
+     This may cause latent dynamic errors to become static errors.
+  - Added support for a 'supports-graceful-termination' execution
+    requirement and tag, which causes Bazel to send a SIGTERM to any
+    tagged
+    actions before sending a delayed SIGKILL. This is to give
+    actions, and more
+    specifically tests, a chance to clean up after themselves.
+  - Non-android targets can again be built when
+    android_sdk_repository is present but invalid.
 
-This release contains contributions from many people at Google, as well as David Ostrovsky.
+This release contains contributions from many people at Google, as well as Benjamin Peterson, Daniel Wagner-Hall, Dave MacLachlan, David Ostrovsky, Emil Kattainen, George Gensure, Greg Estren, Keith Smiley, mai12, Mai Hussien, Michael Eisel, Per Halvor Tryggeseth, Ruixin Bao, Samuel Giddins, Steeve Morin, Thi Doan, Tom de Goede, Ulf Adams, Zhongpeng Lin.
 
 ## Release 3.5.0 (2020-09-02)
 
