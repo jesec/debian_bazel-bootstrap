@@ -24,7 +24,7 @@ import com.google.devtools.build.lib.packages.NativeInfo;
 import com.google.devtools.build.lib.rules.cpp.LibraryToLink;
 import com.google.devtools.build.lib.skyframe.serialization.autocodec.AutoCodec;
 import com.google.devtools.build.lib.starlarkbuildapi.java.JavaNativeLibraryInfoApi;
-import com.google.devtools.build.lib.syntax.EvalException;
+import net.starlark.java.eval.EvalException;
 
 /**
  * A target that provides native libraries in the transitive closure of its deps that are needed for
@@ -40,8 +40,12 @@ public final class JavaNativeLibraryInfo
   private final NestedSet<LibraryToLink> transitiveJavaNativeLibraries;
 
   public JavaNativeLibraryInfo(NestedSet<LibraryToLink> transitiveJavaNativeLibraries) {
-    super(PROVIDER);
     this.transitiveJavaNativeLibraries = transitiveJavaNativeLibraries;
+  }
+
+  @Override
+  public Provider getProvider() {
+    return PROVIDER;
   }
 
   /**

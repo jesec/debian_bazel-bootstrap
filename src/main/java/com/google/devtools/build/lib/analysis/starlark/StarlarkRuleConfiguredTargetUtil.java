@@ -37,10 +37,9 @@ import com.google.devtools.build.lib.collect.nestedset.NestedSetBuilder;
 import com.google.devtools.build.lib.events.Event;
 import com.google.devtools.build.lib.packages.AdvertisedProviderSet;
 import com.google.devtools.build.lib.packages.BazelStarlarkContext;
+import com.google.devtools.build.lib.packages.BuiltinProvider;
 import com.google.devtools.build.lib.packages.FunctionSplitTransitionAllowlist;
 import com.google.devtools.build.lib.packages.Info;
-import com.google.devtools.build.lib.packages.NativeProvider;
-import com.google.devtools.build.lib.packages.NativeProvider.WithLegacyStarlarkName;
 import com.google.devtools.build.lib.packages.Provider;
 import com.google.devtools.build.lib.packages.RuleClass;
 import com.google.devtools.build.lib.packages.RuleClass.ConfiguredTargetFactory.RuleErrorException;
@@ -50,22 +49,23 @@ import com.google.devtools.build.lib.packages.StructImpl;
 import com.google.devtools.build.lib.packages.StructProvider;
 import com.google.devtools.build.lib.packages.TargetUtils;
 import com.google.devtools.build.lib.packages.Type;
-import com.google.devtools.build.lib.syntax.Dict;
-import com.google.devtools.build.lib.syntax.EvalException;
-import com.google.devtools.build.lib.syntax.Location;
-import com.google.devtools.build.lib.syntax.Mutability;
-import com.google.devtools.build.lib.syntax.Sequence;
-import com.google.devtools.build.lib.syntax.Starlark;
-import com.google.devtools.build.lib.syntax.StarlarkCallable;
-import com.google.devtools.build.lib.syntax.StarlarkSemantics;
-import com.google.devtools.build.lib.syntax.StarlarkThread;
-import com.google.devtools.build.lib.syntax.StarlarkValue;
+import com.google.devtools.build.lib.packages.semantics.BuildLanguageOptions;
 import com.google.devtools.build.lib.vfs.PathFragment;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import javax.annotation.Nullable;
+import net.starlark.java.eval.Dict;
+import net.starlark.java.eval.EvalException;
+import net.starlark.java.eval.Mutability;
+import net.starlark.java.eval.Sequence;
+import net.starlark.java.eval.Starlark;
+import net.starlark.java.eval.StarlarkCallable;
+import net.starlark.java.eval.StarlarkSemantics;
+import net.starlark.java.eval.StarlarkThread;
+import net.starlark.java.eval.StarlarkValue;
+import net.starlark.java.syntax.Location;
 
 /**
  * A helper class to build Rule Configured Targets via runtime loaded rule implementations defined
@@ -125,18 +125,11 @@ public final class StarlarkRuleConfiguredTargetUtil {
         }
       }
 
-      // Add dummy wrapper to show call that instantiated rule.
-      StarlarkCallable fn =
-          newDummyFunction(
-              ruleClass.getConfiguredTargetFunction(),
-              String.format("%s(name = '%s')", ruleClass, ruleContext.getRule().getName()),
-              ruleContext.getRule().getLocation());
-
       // call rule.implementation(ctx)
       Object target =
           Starlark.fastcall(
               thread,
-              fn,
+              ruleClass.getConfiguredTargetFunction(),
               /*positional=*/ new Object[] {starlarkRuleContext},
               /*named=*/ new Object[0]);
 
@@ -175,23 +168,6 @@ public final class StarlarkRuleConfiguredTargetUtil {
             .add(RunfilesProvider.class, RunfilesProvider.EMPTY)
             .build();
       }
-      // TODO(adonovan): rather than interpose a wrapper function to show the call that instantiated
-      // the rule, consider manipulating the stack after the fact, like so:
-      //
-      // Rule rule = ruleContext.getRule();
-      // StarlarkThread.CallStackEntry dummy =
-      //     new StarlarkThread.CallStackEntry(
-      //         String.format("%s(name = '%s')", rule.getRuleClass(), rule.getName()),
-      //         rule.getLocation());
-      // ImmutableList<StarlarkThread.CallStackEntry> stack =
-      //
-      // ImmutableList.<StarlarkThread.CallStackEntry>builder().add(dummy).addAll(ex.getCallStack()).build();
-      // ruleContext.ruleError("\n" + EvalException.formatCallStack(stack, ex.getMessage(),
-      // /*src=*/null));
-      //
-      // However, this causes some tests to fail, and I don't want it to block this change.
-      // (Hypothesis: the dummy function affects only EvalExceptions raised during fastcall(), but
-      // not before.)
       ruleContext.ruleError("\n" + ex.getMessageWithStack());
       return null;
     } finally {
@@ -199,28 +175,6 @@ public final class StarlarkRuleConfiguredTargetUtil {
         starlarkRuleContext.nullify();
       }
     }
-  }
-
-  // Returns a dummy Starlark built-in function that simply delegates to fn,
-  // but causes the information name and location to the appear in the call stack.
-  private static StarlarkCallable newDummyFunction(StarlarkCallable fn, String name, Location loc) {
-    return new StarlarkCallable() {
-      @Override
-      public Object fastcall(StarlarkThread thread, Object[] positional, Object[] named)
-          throws EvalException, InterruptedException {
-        return Starlark.fastcall(thread, fn, positional, named);
-      }
-
-      @Override
-      public String getName() {
-        return name;
-      }
-
-      @Override
-      public Location getLocation() {
-        return loc;
-      }
-    };
   }
 
   private static void checkDeclaredProviders(
@@ -239,7 +193,7 @@ public final class StarlarkRuleConfiguredTargetUtil {
 
   @Nullable
   private static ConfiguredTarget createTarget(StarlarkRuleContext context, Object target)
-      throws EvalException, RuleErrorException, ActionConflictException {
+      throws EvalException, InterruptedException, ActionConflictException {
     RuleConfiguredTargetBuilder builder = new RuleConfiguredTargetBuilder(
         context.getRuleContext());
     // Set the default files to build.
@@ -268,7 +222,7 @@ public final class StarlarkRuleConfiguredTargetUtil {
       if (ex.getDeprecatedLocation() == null) {
         // Prefer target struct's creation location in error messages.
         if (target instanceof Info) {
-          loc = ((Info) target).getCreationLoc();
+          loc = ((Info) target).getCreationLocation();
         }
         ex = new EvalException(loc, ex.getMessage());
       }
@@ -345,10 +299,12 @@ public final class StarlarkRuleConfiguredTargetUtil {
       // Either an old-style struct or a single declared provider (not in a list)
       Info info = (Info) target;
       // Use the creation location of this struct as a better reference in error messages
-      loc = info.getCreationLoc();
+      loc = info.getCreationLocation();
       if (getProviderKey(loc, info).equals(StructProvider.STRUCT.getKey())) {
 
-        if (context.getStarlarkSemantics().incompatibleDisallowStructProviderSyntax()) {
+        if (context
+            .getStarlarkSemantics()
+            .getBool(BuildLanguageOptions.INCOMPATIBLE_DISALLOW_STRUCT_PROVIDER_SYNTAX)) {
           throw Starlark.errorf(
               "Returning a struct from a rule implementation function is deprecated and will "
                   + "be removed soon. It may be temporarily re-enabled by setting "
@@ -448,9 +404,9 @@ public final class StarlarkRuleConfiguredTargetUtil {
         builder.addNativeDeclaredProvider(info);
       }
 
-      if (info.getProvider() instanceof NativeProvider.WithLegacyStarlarkName) {
-        WithLegacyStarlarkName providerWithLegacyName =
-            (WithLegacyStarlarkName) info.getProvider();
+      if (info.getProvider() instanceof BuiltinProvider.WithLegacyStarlarkName) {
+        BuiltinProvider.WithLegacyStarlarkName providerWithLegacyName =
+            (BuiltinProvider.WithLegacyStarlarkName) info.getProvider();
         if (shouldAddWithLegacyKey(oldStyleProviders, providerWithLegacyName)) {
           builder.addStarlarkTransitiveInfo(providerWithLegacyName.getStarlarkName(), info);
         }
@@ -469,9 +425,9 @@ public final class StarlarkRuleConfiguredTargetUtil {
     if (builder.containsProviderKey(info.getProvider().getKey())) {
       return false;
     }
-    if (info.getProvider() instanceof NativeProvider.WithLegacyStarlarkName) {
+    if (info.getProvider() instanceof BuiltinProvider.WithLegacyStarlarkName) {
       String canonicalLegacyKey =
-          ((WithLegacyStarlarkName) info.getProvider()).getStarlarkName();
+          ((BuiltinProvider.WithLegacyStarlarkName) info.getProvider()).getStarlarkName();
       // Add info using its modern key if it was specified using its canonical legacy key, or
       // if no provider was used using that canonical legacy key.
       return fieldName.equals(canonicalLegacyKey)
@@ -483,7 +439,7 @@ public final class StarlarkRuleConfiguredTargetUtil {
 
   @SuppressWarnings("deprecation") // For legacy migrations
   private static boolean shouldAddWithLegacyKey(
-      StructImpl oldStyleProviders, WithLegacyStarlarkName provider)
+      StructImpl oldStyleProviders, BuiltinProvider.WithLegacyStarlarkName provider)
       throws EvalException {
     String canonicalLegacyKey = provider.getStarlarkName();
     // Add info using its canonical legacy key if no provider was specified using that canonical
@@ -523,7 +479,7 @@ public final class StarlarkRuleConfiguredTargetUtil {
     Runfiles defaultRunfiles = null;
     Artifact executable = null;
 
-    Location loc = provider.getCreationLoc();
+    Location loc = provider.getCreationLocation();
 
     if (getProviderKey(loc, provider).equals(DefaultInfo.PROVIDER.getKey())) {
       DefaultInfo defaultInfo = (DefaultInfo) provider;
@@ -586,10 +542,11 @@ public final class StarlarkRuleConfiguredTargetUtil {
 
     if (context.getRuleContext().getRule().isAnalysisTest()) {
       // The Starlark Build API should already throw exception if the rule implementation attempts
-      // to register any actions. This is just a sanity check of this invariant.
+      // to register any actions. This is just a check of this invariant.
       Preconditions.checkState(
           context.getRuleContext().getAnalysisEnvironment().getRegisteredActions().isEmpty(),
-          "%s", context.getRuleContext().getLabel());
+          "%s",
+          context.getRuleContext().getLabel());
 
       executable = context.getRuleContext().createOutputArtifactScript();
     }

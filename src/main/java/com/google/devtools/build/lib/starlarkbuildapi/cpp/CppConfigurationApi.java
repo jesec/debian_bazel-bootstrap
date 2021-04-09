@@ -15,18 +15,18 @@
 package com.google.devtools.build.lib.starlarkbuildapi.cpp;
 
 import com.google.common.collect.ImmutableList;
+import com.google.devtools.build.docgen.annot.DocCategory;
 import com.google.devtools.build.lib.cmdline.Label;
-import com.google.devtools.build.lib.syntax.EvalException;
-import com.google.devtools.build.lib.syntax.StarlarkValue;
 import net.starlark.java.annot.StarlarkBuiltin;
-import net.starlark.java.annot.StarlarkDocumentationCategory;
 import net.starlark.java.annot.StarlarkMethod;
+import net.starlark.java.eval.EvalException;
+import net.starlark.java.eval.StarlarkValue;
 
 /** The C++ configuration fragment. */
 @StarlarkBuiltin(
     name = "cpp",
     doc = "A configuration fragment for C++.",
-    category = StarlarkDocumentationCategory.CONFIGURATION_FRAGMENT)
+    category = DocCategory.CONFIGURATION_FRAGMENT)
 public interface CppConfigurationApi<InvalidConfigurationExceptionT extends Exception>
     extends StarlarkValue {
 
@@ -77,4 +77,12 @@ public interface CppConfigurationApi<InvalidConfigurationExceptionT extends Exce
               + "    )<br/>"
               + ")</pre>")
   Label customMalloc();
+
+  @StarlarkMethod(
+      name = "do_not_use_macos_set_install_name",
+      structField = true,
+      // Only for migration purposes. Intentionally not documented.
+      documented = false,
+      doc = "Accessor for <code>--incompatible_macos_set_install_name</code>.")
+  boolean macosSetInstallName();
 }

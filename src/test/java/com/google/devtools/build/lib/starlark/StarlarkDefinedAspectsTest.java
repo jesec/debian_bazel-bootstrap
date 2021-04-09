@@ -46,9 +46,13 @@ import com.google.devtools.build.lib.packages.util.MockProtoSupport;
 import com.google.devtools.build.lib.rules.cpp.CppConfiguration;
 import com.google.devtools.build.lib.rules.java.JavaConfiguration;
 import com.google.devtools.build.lib.rules.objc.ObjcProtoProvider;
+import com.google.devtools.build.lib.server.FailureDetails.Analysis;
+import com.google.devtools.build.lib.server.FailureDetails.Analysis.Code;
+import com.google.devtools.build.lib.server.FailureDetails.FailureDetail;
 import com.google.devtools.build.lib.skyframe.AspectValueKey.AspectKey;
-import com.google.devtools.build.lib.syntax.Sequence;
 import com.google.devtools.build.lib.vfs.FileSystemUtils;
+import net.starlark.java.eval.Sequence;
+import net.starlark.java.eval.StarlarkInt;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -756,7 +760,6 @@ public class StarlarkDefinedAspectsTest extends AnalysisTestCase {
         "ERROR /workspace/test/BUILD:1:13: in "
             + "//test:aspect.bzl%MyAspect aspect on java_library rule //test:xxx: \n"
             + "Traceback (most recent call last):\n"
-            + "\tFile \"/workspace/test/BUILD\", line 1, column 13, in //test:aspect.bzl%MyAspect\n"
             + "\tFile \"/workspace/test/aspect.bzl\", line 2, column 13, in _impl\n"
             + "Error: integer division by zero");
   }
@@ -1577,7 +1580,13 @@ public class StarlarkDefinedAspectsTest extends AnalysisTestCase {
     AnalysisResult result = update(ImmutableList.of("test/aspect.bzl%MyAspect"), "//test:xxx");
     if (result.hasError()) {
       assertThat(keepGoing()).isTrue();
-      throw new ViewCreationFailedException("Analysis failed");
+      String errorMessage = "Analysis failed";
+      throw new ViewCreationFailedException(
+          errorMessage,
+          FailureDetail.newBuilder()
+              .setMessage(errorMessage)
+              .setAnalysis(Analysis.newBuilder().setCode(Code.ANALYSIS_UNKNOWN))
+              .build());
     }
 
     return getConfiguredTarget("//test:xxx");
@@ -2452,7 +2461,7 @@ public class StarlarkDefinedAspectsTest extends AnalysisTestCase {
         new StarlarkProvider.Key(
             Label.parseAbsolute("//test:aspect.bzl", ImmutableMap.of()), "PCollector");
     StructImpl collector = (StructImpl) configuredAspect.get(pCollector);
-    assertThat(collector.getValue("attr_value")).isEqualTo(30);
+    assertThat(collector.getValue("attr_value")).isEqualTo(StarlarkInt.of(30));
   }
 
   @Test
@@ -2507,7 +2516,7 @@ public class StarlarkDefinedAspectsTest extends AnalysisTestCase {
         new StarlarkProvider.Key(
             Label.parseAbsolute("//test:aspect.bzl", ImmutableMap.of()), "PCollector");
     StructImpl collector = (StructImpl) configuredAspect.get(pCollector);
-    assertThat(collector.getValue("attr_value")).isEqualTo(30);
+    assertThat(collector.getValue("attr_value")).isEqualTo(StarlarkInt.of(30));
   }
 
   @Test

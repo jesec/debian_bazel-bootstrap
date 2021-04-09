@@ -18,7 +18,6 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.google.devtools.build.lib.actions.Artifact;
 import com.google.devtools.build.lib.analysis.RuleContext;
-import com.google.devtools.build.lib.analysis.TransitionMode;
 import com.google.devtools.build.lib.collect.nestedset.Depset;
 import com.google.devtools.build.lib.collect.nestedset.NestedSet;
 import com.google.devtools.build.lib.collect.nestedset.NestedSetBuilder;
@@ -26,10 +25,10 @@ import com.google.devtools.build.lib.concurrent.ThreadSafety.Immutable;
 import com.google.devtools.build.lib.packages.BuiltinProvider;
 import com.google.devtools.build.lib.packages.NativeInfo;
 import com.google.devtools.build.lib.starlarkbuildapi.android.AndroidLibraryAarInfoApi;
-import com.google.devtools.build.lib.syntax.EvalException;
-import com.google.devtools.build.lib.syntax.Sequence;
 import java.util.Objects;
 import javax.annotation.Nullable;
+import net.starlark.java.eval.EvalException;
+import net.starlark.java.eval.Sequence;
 
 /**
  * A target that can provide the aar artifact of Android libraries and all the manifests that are
@@ -49,10 +48,14 @@ public class AndroidLibraryAarInfo extends NativeInfo
       @Nullable Aar aar,
       NestedSet<Aar> transitiveAars,
       NestedSet<Artifact> transitiveAarArtifacts) {
-    super(PROVIDER);
     this.aar = aar;
     this.transitiveAars = transitiveAars;
     this.transitiveAarArtifacts = transitiveAarArtifacts;
+  }
+
+  @Override
+  public Provider getProvider() {
+    return PROVIDER;
   }
 
   public static AndroidLibraryAarInfo create(
@@ -165,8 +168,7 @@ public class AndroidLibraryAarInfo extends NativeInfo
     public AndroidLibraryAarInfo toProvider(
         RuleContext ruleContext, boolean definesLocalResources) {
       return toProvider(
-          AndroidCommon.getTransitivePrerequisites(ruleContext, TransitionMode.TARGET, PROVIDER),
-          definesLocalResources);
+          AndroidCommon.getTransitivePrerequisites(ruleContext, PROVIDER), definesLocalResources);
     }
 
     public AndroidLibraryAarInfo toProvider(

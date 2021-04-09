@@ -39,12 +39,6 @@ import com.google.devtools.build.lib.runtime.ProcessWrapper;
 import com.google.devtools.build.lib.runtime.RepositoryRemoteExecutor;
 import com.google.devtools.build.lib.skyframe.IgnoredPackagePrefixesValue;
 import com.google.devtools.build.lib.skyframe.PrecomputedValue;
-import com.google.devtools.build.lib.syntax.EvalException;
-import com.google.devtools.build.lib.syntax.Mutability;
-import com.google.devtools.build.lib.syntax.Starlark;
-import com.google.devtools.build.lib.syntax.StarlarkCallable;
-import com.google.devtools.build.lib.syntax.StarlarkSemantics;
-import com.google.devtools.build.lib.syntax.StarlarkThread;
 import com.google.devtools.build.lib.vfs.Path;
 import com.google.devtools.build.lib.vfs.PathFragment;
 import com.google.devtools.build.skyframe.SkyFunction.Environment;
@@ -54,6 +48,12 @@ import java.io.IOException;
 import java.util.Map;
 import java.util.Set;
 import javax.annotation.Nullable;
+import net.starlark.java.eval.EvalException;
+import net.starlark.java.eval.Mutability;
+import net.starlark.java.eval.Starlark;
+import net.starlark.java.eval.StarlarkCallable;
+import net.starlark.java.eval.StarlarkSemantics;
+import net.starlark.java.eval.StarlarkThread;
 
 /** A repository function to delegate work done by Starlark remote repositories. */
 public class StarlarkRepositoryFunction extends RepositoryFunction {
@@ -274,17 +274,17 @@ public class StarlarkRepositoryFunction extends RepositoryFunction {
 
   @SuppressWarnings("unchecked")
   private static Iterable<String> getEnviron(Rule rule) {
-    return (Iterable<String>) rule.getAttributeContainer().getAttr("$environ");
+    return (Iterable<String>) rule.getAttr("$environ");
   }
 
   @Override
   protected boolean isLocal(Rule rule) {
-    return (Boolean) rule.getAttributeContainer().getAttr("$local");
+    return (Boolean) rule.getAttr("$local");
   }
 
   @Override
   protected boolean isConfigure(Rule rule) {
-    return (Boolean) rule.getAttributeContainer().getAttr("$configure");
+    return (Boolean) rule.getAttr("$configure");
   }
 
   /**
@@ -294,8 +294,7 @@ public class StarlarkRepositoryFunction extends RepositoryFunction {
    * method can also be used as a universal check.
    */
   public static boolean isConfigureRule(Rule rule) {
-    return rule.getRuleClassObject().isStarlark()
-        && ((Boolean) rule.getAttributeContainer().getAttr("$configure"));
+    return rule.getRuleClassObject().isStarlark() && ((Boolean) rule.getAttr("$configure"));
   }
 
   @Override
