@@ -1,6 +1,7 @@
 bazel-bootstrap (4.0.0+ds-1) UNRELEASED; urgency=medium
 
   * New upstream release
+    - Update patches for new version
 
  -- Jesse Chan <jc@linux.com>  Fri, 09 Apr 2021 22:57:29 +0800
 
